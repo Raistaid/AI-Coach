@@ -14,6 +14,7 @@ const skills = {
   squats: { goal: 'Приседаю с контролем', label: 'Приседания', description: 'Встань боком или немного под углом к камере. Приседай в комфортной амплитуде, без боли.' },
   balance: { goal: 'Улучшаю баланс', label: 'Подъёмы ноги', description: 'Поднимай одну стопу и сохраняй устойчивое положение. Рядом должно быть место для опоры.' },
 };
+const cueLabels = { 'no-person':'Камера', 'show-feet':'Положение в кадре', 'squat-complete':'Повтор', 'squat-torso':'Положение корпуса', 'squat-rise':'Движение', 'squat-camera':'Ракурс', 'balance-align':'Равновесие', 'balance-hold':'Баланс', 'balance-start':'Начало', 'foot-lift':'Движение стопы', 'football-torso':'Положение корпуса', 'support-knee':'Опорная нога', 'football-lift':'Подъём стопы', 'football-start':'Первый шаг' };
 const saved = storage.read('ai-coach:preferences', {});
 const prefs = { voice: false, skeleton: true, mirror: false, ...saved };
 let history = storage.read('ai-coach:sessions', []);
@@ -58,6 +59,7 @@ function setState(next) {
   $('goalInput').disabled = active;
   text('statusText', {ready:'Готов к тренировке',loading:'Подключаем тренера',live:mode === 'demo' ? 'Демонстрация тренировки' : 'Тренер наблюдает',paused:'Тренировка на паузе',finished:'Тренировка завершена',error:'Давай попробуем ещё раз'}[next]);
   $('cameraPlaceholder').hidden = !['ready', 'error', 'finished'].includes(next);
+  video.setAttribute('aria-hidden',String(!active || mode==='demo'));
   $('pauseSession').setAttribute('aria-label', next === 'paused' ? 'Продолжить тренировку' : 'Приостановить тренировку');
   $('pauseSession').querySelector('span').textContent = next === 'paused' ? 'Продолжить' : 'Пауза';
   $('switchCamera').disabled = mode === 'demo' || source === 'file' || next === 'loading';
@@ -91,7 +93,7 @@ function speak(message) {
 function addFeedback(feedback) {
   if (!feedback?.text) return;
   if (cues.at(-1)?.text === feedback.text && elapsedMs - cues.at(-1).at < 12000) return;
-  cues.push({ text: feedback.text, kind: feedback.kind || 'tip', tag: feedback.tag || 'Техника', at: elapsedMs });
+  cues.push({ text: feedback.text, kind: feedback.kind || 'tip', tag: cueLabels[feedback.tag] || feedback.tag || 'Техника', at: elapsedMs });
   cues = cues.slice(-100);
   const item = document.createElement('div'); item.className = `feedback-item ${feedback.kind || 'tip'}`;
   const avatar = document.createElement('span'); avatar.className = 'feedback-avatar'; avatar.textContent = '✦';
@@ -199,7 +201,9 @@ function startDemo() {
   addFeedback({text:'Это демонстрация интерфейса. В тренировке подсказки будут зависеть от твоих движений.',tag:'Знакомство',kind:'tip'});
 }
 function beginLive(run) {
-  setState('live'); lastTick = performance.now(); text('stageHint',mode === 'demo' ? 'Симуляция · не анализ камеры' : 'Встань так, чтобы были видны обе стопы и плечи');
+  setState('live');
+  if(matchMedia('(max-width: 720px)').matches) video.closest('.video-column').scrollIntoView({behavior:'smooth',block:'start'});
+  lastTick = performance.now(); text('stageHint',mode === 'demo' ? 'Симуляция · не анализ камеры' : 'Встань так, чтобы были видны обе стопы и плечи');
   if (mode !== 'demo') text('modelStatus','Тренер готов · анализ на устройстве');
   if (navigator.wakeLock && mode !== 'demo') navigator.wakeLock.request('screen').then(lock=>{if(generation===run) wakeLock=lock; else lock.release();}).catch(()=>{});
   raf = requestAnimationFrame(t=>tick(t,run));
