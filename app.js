@@ -9,6 +9,50 @@ const storage = {
   read(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } },
   write(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Private browsing can restrict storage. */ } },
 };
+
+// Desktop navigation preference; phones use a temporary, dismissible drawer.
+const sidebarQuery = matchMedia('(max-width: 900px)');
+let sidebarOpen = false;
+function setSidebar(open, { persist = true, focus = true } = {}) {
+  sidebarOpen = open;
+  const sidebar = $('sidebar');
+  sidebar.hidden = !open;
+  sidebar.inert = !open;
+  app.dataset.sidebar = open ? 'open' : 'closed';
+  $('openSidebar').hidden = open && !sidebarQuery.matches;
+  $('openSidebar').setAttribute('aria-expanded', String(open));
+  $('sidebarBackdrop').hidden = !open || !sidebarQuery.matches;
+  $('training').inert = open && sidebarQuery.matches;
+  document.body.classList.toggle('menu-open', open && sidebarQuery.matches);
+  if (open && sidebarQuery.matches) {
+    sidebar.setAttribute('role', 'dialog');
+    sidebar.setAttribute('aria-modal', 'true');
+  } else {
+    sidebar.removeAttribute('role');
+    sidebar.removeAttribute('aria-modal');
+  }
+  if (persist && !sidebarQuery.matches) storage.write('ai-coach:sidebar-collapsed', !open);
+  if (focus) (open ? $('closeSidebar') : $('openSidebar')).focus();
+}
+$('openSidebar').addEventListener('click', () => setSidebar(true));
+$('closeSidebar').addEventListener('click', () => setSidebar(false));
+$('sidebarBackdrop').addEventListener('click', () => setSidebar(false));
+$('sidebar').querySelectorAll('a').forEach(link => link.addEventListener('click', () => {
+  if (sidebarQuery.matches) setSidebar(false);
+}));
+document.addEventListener('keydown', event => {
+  if (!sidebarOpen) return;
+  if (event.key === 'Escape') { event.preventDefault(); setSidebar(false); }
+  if (event.key === 'Tab' && sidebarQuery.matches) {
+    const controls = [...$('sidebar').querySelectorAll('a[href],button:not(:disabled)')];
+    const first = controls[0], last = controls.at(-1);
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
+});
+sidebarQuery.addEventListener('change', () => setSidebar(!sidebarQuery.matches && !storage.read('ai-coach:sidebar-collapsed', false), { persist: false, focus: false }));
+setSidebar(!sidebarQuery.matches && !storage.read('ai-coach:sidebar-collapsed', false), { persist: false, focus: false });
+
 const skills = {
   football: { goal: 'Учусь чеканить мяч', label: 'Подъёмы стопы', description: 'Начни с устойчивой стойки и невысоких подъёмов стопы. Считаем движения ноги, а не касания мяча.' },
   squats: { goal: 'Приседаю с контролем', label: 'Приседания', description: 'Встань боком или немного под углом к камере. Приседай в комфортной амплитуде, без боли.' },
@@ -274,7 +318,7 @@ function drawPose(landmarks) {
   const scale=Math.max(width/video.videoWidth,height/video.videoHeight);
   const ox=(width-video.videoWidth*scale)/2,oy=(height-video.videoHeight*scale)/2;
   const point=p=>({x:p.x*video.videoWidth*scale+ox,y:p.y*video.videoHeight*scale+oy});
-  ctx.lineWidth=2;ctx.strokeStyle='rgba(212,255,90,.8)';ctx.fillStyle='#e1ff8a';
+  ctx.lineWidth=2;ctx.strokeStyle='rgba(168,203,177,.85)';ctx.fillStyle='#c9dfce';
   for(const [a,b] of POSE_CONNECTIONS){const p=landmarks[a],q=landmarks[b];if(!p||!q||(p.visibility??1)<.5||(q.visibility??1)<.5)continue;const u=point(p),v=point(q);ctx.beginPath();ctx.moveTo(u.x,u.y);ctx.lineTo(v.x,v.y);ctx.stroke();}
   for(const p of landmarks){if((p.visibility??1)<.5)continue;const v=point(p);ctx.beginPath();ctx.arc(v.x,v.y,3,0,Math.PI*2);ctx.fill();}
 }
@@ -296,7 +340,7 @@ function demoPose(seconds) {
 function renderDemo(now) {
   const {ctx,width:w,height:h}=canvasContext(demoCanvas);ctx.clearRect(0,0,w,h);
   const gradient=ctx.createLinearGradient(0,0,w,h);gradient.addColorStop(0,'#25312c');gradient.addColorStop(1,'#0e1713');ctx.fillStyle=gradient;ctx.fillRect(0,0,w,h);
-  ctx.strokeStyle='rgba(212,255,90,.09)';ctx.lineWidth=1;
+  ctx.strokeStyle='rgba(168,203,177,.06)';ctx.lineWidth=1;
   for(let n=0;n<9;n++){ctx.beginPath();ctx.moveTo(w/2,h*.38);ctx.lineTo(w*(n/8),h);ctx.stroke();}
   for(let n=0;n<7;n++){const y=h*(.47+n*.085);ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
   const points=demoPose(elapsedMs/1000);
@@ -305,11 +349,11 @@ function renderDemo(now) {
   ctx.lineCap='round';ctx.lineJoin='round';ctx.lineWidth=w*.026;ctx.strokeStyle='#92b795';
   for(const [a,b]of parts){const u=map(points[a]),v=map(points[b]);ctx.beginPath();ctx.moveTo(u.x,u.y);ctx.lineTo(v.x,v.y);ctx.stroke();}
   const head=map(points[0]);ctx.fillStyle='#b1c8ab';ctx.beginPath();ctx.arc(head.x,head.y,w*.049,0,Math.PI*2);ctx.fill();
-  ctx.lineWidth=2;ctx.strokeStyle='#d4ff5a';ctx.fillStyle='#d4ff5a';
+  ctx.lineWidth=2;ctx.strokeStyle='#a8cbb1';ctx.fillStyle='#a8cbb1';
   for(const i of [11,12,13,14,23,24,25,26,27,28]){const v=map(points[i]);ctx.beginPath();ctx.arc(v.x,v.y,4,0,Math.PI*2);ctx.fill();}
   if(sessionSkill==='football'){
     const foot=map(points[32]);const ballY=foot.y-30-Math.abs(Math.sin(elapsedMs/1000*1.55))*h*.1;
-    ctx.fillStyle='#e0ff88';ctx.beginPath();ctx.arc(foot.x+14,ballY,w*.042,0,Math.PI*2);ctx.fill();ctx.fillStyle='#1a2616';ctx.font=`${w*.035}px sans-serif`;ctx.fillText('⬡',foot.x+6,ballY+5);
+    ctx.fillStyle='#c3dac8';ctx.beginPath();ctx.arc(foot.x+14,ballY,w*.042,0,Math.PI*2);ctx.fill();ctx.fillStyle='#1a2616';ctx.font=`${w*.035}px sans-serif`;ctx.fillText('⬡',foot.x+6,ballY+5);
   }
   if(now-lastAnalysis>120){
     const result=analyzePose(points,sessionSkill,demoState,now);demoState=result.state;lastAnalysis=now;
