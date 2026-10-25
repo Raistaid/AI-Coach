@@ -1,39 +1,56 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { analyzePose, createAnalysisState, jointAngle, POSE_CONNECTIONS } from './coach-engine.js';
+import {
+  observePose, createPoseState, trackBall, createBallState, createSession, stepSession, skipLesson,
+  describeLesson, mainMistake, jointAngle, POSE_CONNECTIONS,
+} from './coach-engine.js';
+import { SKILL_LIST, PERSONALITIES } from './skills/index.js';
+import { COMMON_PHRASES, pickPhrase, fillTemplate } from './skills/common.js';
 
+/* ───────────── fixtures ───────────── */
 function pose() {
   const p = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.4, z: 0, visibility: 0.99, presence: 0.99 }));
   for (const [index, x, y] of [
-    [11, .44, .20], [12, .56, .20],
-    [23, .46, .46], [24, .54, .46],
-    [25, .46, .66], [26, .54, .66],
-    [27, .46, .88], [28, .54, .88],
+    [11, .44, .20], [12, .56, .20], [13, .38, .33], [14, .62, .33], [15, .34, .44], [16, .66, .44],
+    [23, .46, .46], [24, .54, .46], [25, .46, .66], [26, .54, .66],
+    [27, .46, .88], [28, .54, .88], [31, .46, .92], [32, .54, .92],
   ]) Object.assign(p[index], { x, y });
   return p;
 }
-
+function lifted(side = 0, amount = .08) {
+  const p = pose();
+  p[side === 0 ? 27 : 28].y -= amount; p[side === 0 ? 31 : 32].y -= amount;
+  p[side === 0 ? 25 : 26].y -= amount * .4;
+  return p;
+}
 function crouched() {
   const p = pose();
-  for (const [index, x, y] of [
-    [11, .34, .22], [12, .46, .22],
-    [23, .35, .46], [24, .43, .46],
-    [25, .55, .62], [26, .63, .62],
-    [27, .43, .86], [28, .51, .86],
-  ]) Object.assign(p[index], { x, y });
+  for (const [index, x, y] of [[11, .34, .22], [12, .46, .22], [23, .35, .46], [24, .43, .46], [25, .55, .62], [26, .63, .62], [27, .43, .86], [28, .51, .86]]) Object.assign(p[index], { x, y });
   return p;
 }
+const ball = (y, x = .54) => [{ x, y, w: .08, h: .08, score: .8 }];
 
-function frame(p, state, time = 0, skill = state.skill) {
-  return analyzePose(p, skill, state, time);
+class Sim {
+  constructor(skill = 'football', personality = 'calm') {
+    this.skill = skill; this.pose = createPoseState(); this.ball = createBallState();
+    this.session = createSession(skill, { personality }); this.t = 0; this.log = [];
+  }
+  frame(points, detections = [], dt = 100) {
+    const observed = observePose(points, this.pose, this.t, 1, this.skill); this.pose = observed.state;
+    this.ball = trackBall(detections, this.ball, this.t, observed.obs, 1);
+    const stepped = stepSession(this.session, observed.obs, this.ball, this.t); this.session = stepped.session;
+    if (stepped.feedback) this.log.push(stepped.feedback);
+    this.t += dt; this.last = stepped; this.obs = observed.obs;
+    return stepped;
+  }
+  frames(points, n, detections = []) { let r; for (let i = 0; i < n; i++) r = this.frame(points, detections); return r; }
+  stance() { return this.frames(pose(), 40); }
+  lift(n = 1, amount = .08) { let r; for (let i = 0; i < n; i++) { this.frames(lifted(0, amount), 3); r = this.frames(pose(), 3); } return r; }
+  bounce(times = 1, x = .54) { let r; for (let k = 0; k < times; k++) for (const y of [.60, .70, .80, .86, .80, .70, .60, .55]) r = this.frame(pose(), ball(y, x)); return r; }
+  tags() { return this.log.map(f => f.tag); }
 }
 
-function calibrate(skill = 'football') {
-  let state = createAnalysisState(skill);
-  for (let i = 0; i < 6; i++) state = frame(pose(), state, i * 100).state;
-  return state;
-}
-
+/* ───────────── geometry & vision ───────────── */
 test('joint angle measures straight and bent knees; degenerate points rejected', () => {
   assert.equal(jointAngle({ x: 0, y: 0 }, { x: 0, y: 1 }, { x: 0, y: 2 }), 180);
   assert.equal(jointAngle({ x: 0, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }), 90);
@@ -42,128 +59,265 @@ test('joint angle measures straight and bent knees; degenerate points rejected',
   assert.ok(POSE_CONNECTIONS.every(([a, b]) => a >= 0 && b < 33));
 });
 
-test('missing person emits a useful warning and never counts', () => {
-  const r = frame(null, createAnalysisState(), 0);
-  assert.equal(r.quality, 'missing');
-  assert.equal(r.metrics.visible, false);
-  assert.equal(r.metrics.movements, 0);
-  assert.equal(r.feedback.kind, 'warning');
-  assert.equal(r.feedback.tag, 'no-person');
-});
-
-test('hidden feet are partial visibility, with no claims about movement', () => {
-  const p = pose(); p[27].visibility = .2;
-  const r = frame(p, calibrate(), 1000);
-  assert.equal(r.quality, 'partial');
-  assert.equal(r.feedback.tag, 'show-feet');
-  assert.equal(r.metrics.movements, 0);
-  assert.equal(r.metrics.visible, false);
-});
-
-test('standing and a held lifted foot cannot inflate movement counts', () => {
-  let state = calibrate();
-  for (let i = 0; i < 10; i++) state = frame(pose(), state, 600 + i * 100).state;
-  assert.equal(state.movements, 0);
-  const lifted = pose(); lifted[27].y = .73;
-  for (let i = 0; i < 12; i++) state = frame(lifted, state, 2000 + i * 100).state;
-  assert.equal(state.movements, 0);
-  assert.equal(state.feet[0].phase, 'up');
-  state = frame(pose(), state, 4000).state;
-  state = frame(pose(), state, 4100).state;
-  assert.equal(state.movements, 1);
-  for (let i = 0; i < 10; i++) state = frame(pose(), state, 4200 + i * 100).state;
-  assert.equal(state.movements, 1);
-});
-
-test('single-frame ankle jitter is rejected', () => {
-  let state = calibrate();
-  const lifted = pose(); lifted[27].y = .73;
-  state = frame(lifted, state, 700).state;
-  state = frame(pose(), state, 800).state;
-  state = frame(pose(), state, 900).state;
-  assert.equal(state.movements, 0);
-  assert.equal(state.feet[0].phase, 'down');
-});
-
-test('loss of body resets incomplete movement so re-entry cannot count', () => {
-  let state = calibrate();
-  const lifted = pose(); lifted[27].y = .73;
-  state = frame(lifted, state, 700).state;
-  state = frame(lifted, state, 800).state;
-  assert.equal(state.feet[0].phase, 'up');
-  state = frame(null, state, 900).state;
-  for (let i = 0; i < 8; i++) state = frame(pose(), state, 1000 + i * 100).state;
-  assert.equal(state.movements, 0);
-});
-
-test('squat requires full stand-lower-stand with two-frame hysteresis', () => {
-  let state = createAnalysisState('squats');
-  for (const [p, time] of [[pose(), 0], [pose(), 200], [crouched(), 1000], [crouched(), 1200]]) {
-    state = frame(p, state, time).state;
-  }
-  assert.equal(state.squatPhase, 'lowered');
-  assert.equal(state.reps, 0);
-  state = frame(pose(), state, 2000).state;
-  assert.equal(state.reps, 0);
-  state = frame(pose(), state, 2200).state;
-  assert.equal(state.reps, 1);
-  for (let i = 0; i < 10; i++) state = frame(pose(), state, 2300 + i * 100).state;
-  assert.equal(state.reps, 1);
-});
-
-test('starting crouched then standing is not a full repetition', () => {
-  let state = createAnalysisState('squats');
-  for (const [p, time] of [[crouched(), 0], [crouched(), 200], [pose(), 1000], [pose(), 1200]]) {
-    state = frame(p, state, time).state;
-  }
-  assert.equal(state.reps, 0);
-  assert.equal(state.squatPhase, 'standing');
-});
-
-test('analysis does not mutate prior state or landmark coordinates', () => {
-  const state = calibrate();
-  const p = pose();
-  const before = structuredClone(state);
-  const pointsBefore = structuredClone(p);
-  frame(p, state, 1000);
-  assert.deepEqual(state, before);
-  assert.deepEqual(p, pointsBefore);
-});
-
-test('new coaching cues respect cooldown but loss of view interrupts immediately', () => {
-  let r = frame(pose(), createAnalysisState(), 0);
-  assert.ok(r.feedback);
-  const tilted = pose(); tilted[11].x = .8; tilted[12].x = .92;
-  r = frame(tilted, r.state, 1000);
-  assert.equal(r.feedback, null);
-  r = frame(tilted, r.state, 4100);
-  assert.equal(r.feedback.tag, 'football-torso');
-  r = frame(null, r.state, 4200);
-  assert.equal(r.feedback.tag, 'no-person');
-});
-
-test('changing exercise resets counts and phases', () => {
-  const state = createAnalysisState(); state.movements = 12;
-  const r = analyzePose(pose(), 'squats', state, 1000);
-  assert.equal(r.state.skill, 'squats');
-  assert.equal(r.metrics.movements, 0);
-  assert.equal(r.metrics.reps, 0);
-});
-
-
 test('portrait normalization preserves the same physical knee angle', () => {
   const points = [{ x: .3, y: .3 }, { x: .5, y: .5 }, { x: .6, y: .8 }];
   const aspect = 9 / 16;
   const portrait = points.map(p => ({ x: .5 + (p.x - .5) / aspect, y: p.y }));
-  const expected = jointAngle(...points);
-  assert.ok(Math.abs(jointAngle(...portrait, aspect) - expected) < 1e-8);
-  assert.ok(Math.abs(jointAngle(...portrait) - expected) > 1);
+  assert.ok(Math.abs(jointAngle(...portrait, aspect) - jointAngle(...points)) < 1e-8);
+});
+
+test('missing person is reported, never counted, and warns immediately', () => {
+  const sim = new Sim();
+  const r = sim.frame(null);
+  assert.equal(r.metrics.visible, false);
+  assert.equal(r.metrics.lifts, 0);
+  assert.ok(['lesson-intro', 'no-person'].includes(r.feedback.tag));
+  sim.frames(null, 25);
+  assert.ok(sim.tags().includes('no-person'), 'a warning follows within the cooldown window');
+});
+
+test('hidden feet are partial visibility with no movement claims', () => {
+  const sim = new Sim(); sim.stance();
+  const p = pose(); p[27].visibility = .2;
+  const first = sim.frame(p); const r = sim.frame(p);
+  assert.equal(sim.obs.quality, 'partial');
+  assert.equal(r.metrics.visible, false);
+  assert.equal(first.feedback?.tag, 'show-feet', 'leaving good view warns immediately');
+  assert.equal(r.metrics.lifts, 0);
 });
 
 test('low-confidence shoulder cannot drive posture guidance', () => {
   const p = pose(); p[11].visibility = .1; p[11].x = .95;
-  const result = analyzePose(p, 'football', createAnalysisState(), 0);
-  assert.notEqual(result.quality, 'good');
-  assert.equal(result.metrics.visible, false);
-  assert.equal(result.feedback.kind, 'warning');
+  const { obs } = observePose(p, createPoseState(), 0);
+  assert.notEqual(obs.quality, 'good');
+});
+
+test('standing and a held lifted foot cannot inflate lift counts', () => {
+  const sim = new Sim(); sim.stance();
+  assert.equal(sim.last.metrics.lifts, 0);
+  sim.frames(lifted(), 12);
+  assert.equal(sim.last.metrics.lifts, 0);
+  assert.equal(sim.obs.raised, true);
+  sim.frames(pose(), 2);
+  assert.equal(sim.last.metrics.lifts, 1);
+  sim.frames(pose(), 10);
+  assert.equal(sim.last.metrics.lifts, 1);
+});
+
+test('single-frame ankle jitter is rejected', () => {
+  const sim = new Sim(); sim.stance();
+  sim.frame(lifted()); sim.frames(pose(), 2);
+  assert.equal(sim.last.metrics.lifts, 0);
+});
+
+test('loss of body resets an incomplete lift so re-entry cannot count', () => {
+  const sim = new Sim(); sim.stance();
+  sim.frames(lifted(), 2);
+  assert.equal(sim.obs.raised, true);
+  sim.frame(null);
+  sim.frames(pose(), 8);
+  assert.equal(sim.last.metrics.lifts, 0);
+});
+
+test('a foot above the knee is flagged as a high lift', () => {
+  const sim = new Sim(); sim.stance();
+  sim.frames(lifted(0, .25), 3);
+  assert.equal(sim.obs.liftHigh, true);
+  sim.frames(lifted(0, .08), 3);
+  const low = new Sim(); low.stance(); low.frames(lifted(0, .08), 3);
+  assert.equal(low.obs.liftHigh, false);
+});
+
+test('observation does not mutate prior state or landmark coordinates', () => {
+  const state = createPoseState();
+  const p = pose();
+  const before = structuredClone(state); const pointsBefore = structuredClone(p);
+  observePose(p, state, 1000);
+  assert.deepEqual(state, before); assert.deepEqual(p, pointsBefore);
+});
+
+test('squat requires full stand-lower-stand with two-frame hysteresis', () => {
+  const sim = new Sim('squats');
+  sim.frames(pose(), 2); sim.frames(crouched(), 2);
+  assert.equal(sim.obs.squat.phase, 'lowered');
+  assert.equal(sim.last.metrics.reps, 0);
+  sim.t += 800; sim.frame(pose());
+  assert.equal(sim.last.metrics.reps, 0);
+  sim.frame(pose());
+  assert.equal(sim.last.metrics.reps, 1);
+  sim.frames(pose(), 10);
+  assert.equal(sim.last.metrics.reps, 1);
+});
+
+test('starting crouched then standing is not a repetition', () => {
+  const sim = new Sim('squats');
+  sim.frames(crouched(), 2); sim.t += 800; sim.frames(pose(), 2);
+  assert.equal(sim.last.metrics.reps, 0);
+});
+
+/* ───────────── ball tracking ───────────── */
+test('a downward-to-upward reversal next to the foot is a touch; a toss near the hands is not', () => {
+  const sim = new Sim(); sim.stance();
+  sim.bounce(1);
+  assert.equal(sim.ball.touches, 1);
+  // Ball reversing high in the frame (hands) must not count.
+  const high = new Sim(); high.stance();
+  for (const y of [.25, .32, .40, .46, .40, .32, .25]) high.frame(pose(), ball(y));
+  assert.equal(high.ball.touches, 0);
+});
+
+test('ball resting on the ground after a streak is a drop that resets the streak', () => {
+  const sim = new Sim(); sim.stance();
+  sim.bounce(3);
+  assert.equal(sim.ball.streak, 3);
+  for (let i = 0; i < 8; i++) sim.frame(pose(), ball(.90));
+  assert.equal(sim.ball.drops, 1);
+  assert.equal(sim.ball.streak, 0);
+  assert.equal(sim.ball.bestStreak, 3);
+  assert.equal(sim.ball.lastStreak, 3);
+  assert.ok(sim.tags().includes('ball-drop'));
+});
+
+test('ball never seen means no touches are claimed and metrics say so', () => {
+  const sim = new Sim(); sim.stance(); sim.lift(3);
+  assert.equal(sim.last.metrics.touches, 0);
+  assert.equal(sim.last.metrics.ballEverSeen, false);
+  assert.equal(sim.last.metrics.lifts, 3);
+});
+
+test('detector noise below the score threshold is ignored', () => {
+  const sim = new Sim(); sim.stance();
+  for (const y of [.60, .70, .80, .86, .80, .70, .60]) sim.frame(pose(), [{ x: .54, y, w: .08, h: .08, score: .1 }]);
+  assert.equal(sim.ball.seen, false);
+  assert.equal(sim.ball.touches, 0);
+});
+
+test('ball tracking is pure', () => {
+  const state = createBallState(); const before = structuredClone(state);
+  trackBall(ball(.6), state, 100, null, 1);
+  assert.deepEqual(state, before);
+});
+
+/* ───────────── lessons ───────────── */
+test('stance lesson completes only after holding still, then the next lesson is introduced', () => {
+  const sim = new Sim();
+  sim.frames(pose(), 10);
+  assert.equal(describeLesson(sim.session).index, 0);
+  sim.frames(pose(), 30);
+  assert.equal(describeLesson(sim.session).index, 1);
+  assert.deepEqual(sim.session.completedLessons, ['stance']);
+  const tags = sim.tags();
+  assert.ok(tags.indexOf('lesson-complete') < tags.lastIndexOf('lesson-intro'));
+});
+
+test('lift lesson needs six low lifts; high lifts do not count towards it', () => {
+  const sim = new Sim(); sim.stance();
+  sim.lift(3, .25);
+  assert.equal(describeLesson(sim.session).progress, 0);
+  sim.lift(6, .08);
+  assert.equal(describeLesson(sim.session).index, 2);
+});
+
+test('series lesson only counts a streak started after the lesson began', () => {
+  const sim = new Sim(); sim.stance(); sim.lift(6);
+  assert.equal(describeLesson(sim.session).title, 'Одно касание');
+  sim.bounce(3);
+  const lesson = describeLesson(sim.session);
+  assert.equal(lesson.title, 'Серия из 3');
+  assert.ok(lesson.progress < 3, 'previous touches must not pre-fill the series');
+  sim.bounce(3);
+  assert.equal(describeLesson(sim.session).title, 'Серия из 5');
+});
+
+test('course completion is announced once and free practice keeps counting', () => {
+  const sim = new Sim(); sim.stance(); sim.lift(6); sim.bounce(3); sim.bounce(3); sim.bounce(5); sim.bounce(10);
+  assert.equal(sim.session.courseComplete, true);
+  assert.equal(sim.tags().filter(t => t === 'course-complete').length, 1);
+  const before = sim.ball.touches; sim.bounce(2);
+  assert.equal(sim.ball.touches, before + 2);
+  assert.equal(describeLesson(sim.session).complete, true);
+});
+
+test('skipping a lesson is recorded honestly and not as completed', () => {
+  const sim = new Sim(); sim.stance(); sim.lift(6);
+  sim.session = skipLesson(sim.session);
+  assert.deepEqual(sim.session.skippedLessons, ['touch']);
+  assert.deepEqual(sim.session.completedLessons, ['stance', 'lifts']);
+  assert.equal(describeLesson(sim.session).title, 'Серия из 3');
+});
+
+test('ball-dependent lesson asks for the ball when none is visible', () => {
+  const sim = new Sim(); sim.stance(); sim.lift(6);
+  sim.t += 5000; sim.frames(pose(), 3);
+  assert.ok(sim.tags().includes('ball-missing'));
+});
+
+test('balance lesson progresses with held seconds and squats with reps', () => {
+  const balance = new Sim('balance');
+  balance.frames(pose(), 4);
+  const up = pose(); up[28].y = .75; up[32].y = .79;
+  for (let i = 0; i < 25; i++) balance.frame(up);
+  assert.equal(balance.obs.balanceSeconds >= 1, true);
+  assert.ok(describeLesson(balance.session).index >= 1);
+  const squats = new Sim('squats');
+  squats.frames(pose(), 25);
+  assert.equal(describeLesson(squats.session).index, 1);
+  for (let k = 0; k < 5; k++) { squats.frames(crouched(), 2); squats.t += 900; squats.frames(pose(), 2); }
+  assert.equal(squats.last.metrics.reps, 5);
+  assert.equal(describeLesson(squats.session).index, 2);
+});
+
+/* ───────────── phrases & cooldowns ───────────── */
+test('every skill has at least five phrases per tag and personality and templates resolve', () => {
+  for (const skill of SKILL_LIST) {
+    for (const rule of skill.rules) {
+      const bank = skill.phrases[rule.tag];
+      assert.ok(bank, `${skill.id} lacks phrases for ${rule.tag}`);
+      for (const p of Object.keys(PERSONALITIES)) assert.ok(bank[p]?.length >= 5, `${skill.id}/${rule.tag}/${p}`);
+    }
+    for (const lesson of skill.lessons) for (const p of Object.keys(PERSONALITIES)) assert.ok(lesson.intro[p]);
+  }
+  for (const tag of Object.keys(COMMON_PHRASES)) for (const p of Object.keys(PERSONALITIES)) assert.ok(COMMON_PHRASES[tag][p].length >= 5);
+  assert.equal(fillTemplate('Серия {streak}, касаний {touches}', { streak: 3, touches: 7 }), 'Серия 3, касаний 7');
+});
+
+test('phrase picker avoids repeating the previous phrase', () => {
+  const bank = { calm: ['a', 'b', 'c'] };
+  const first = pickPhrase(bank, 'calm', -1, 0);
+  const second = pickPhrase(bank, 'calm', first.index, 0);
+  assert.notEqual(first.index, second.index);
+});
+
+test('personality changes the words but never the observation', () => {
+  const strict = new Sim('football', 'strict'); strict.stance(); strict.bounce(3);
+  const fun = new Sim('football', 'fun'); fun.stance(); fun.bounce(3);
+  assert.deepEqual(strict.tags(), fun.tags());
+  assert.equal(strict.ball.touches, fun.ball.touches);
+  assert.notDeepEqual(strict.log.map(f => f.text), fun.log.map(f => f.text));
+});
+
+test('coaching tips respect the cooldown but loss of view interrupts immediately', () => {
+  const sim = new Sim(); sim.stance();
+  const start = sim.log.length;
+  sim.frames(pose(), 5);
+  assert.ok(sim.log.length - start <= 1);
+  const tilted = pose(); tilted[11].x = .8; tilted[12].x = .92; tilted[13].x = .85; tilted[14].x = .97; tilted[15].x = .9; tilted[16].x = .98;
+  sim.t += 4000; sim.frame(tilted);
+  assert.equal(sim.log.at(-1).tag, 'torso');
+  sim.frame(null);
+  assert.equal(sim.log.at(-1).tag, 'no-person');
+});
+
+test('main mistake is the most frequent corrective tag', () => {
+  const session = createSession();
+  session.tagCounts = { start: 9, 'lift-high': 4, torso: 2, 'ball-touch': 20 };
+  assert.deepEqual(mainMistake(session), { tag: 'lift-high', count: 4 });
+  assert.equal(mainMistake(createSession()), null);
+});
+
+test('session stepping is pure', () => {
+  const session = createSession(); const before = structuredClone(session);
+  const { obs } = observePose(pose(), createPoseState(), 0);
+  stepSession(session, obs, createBallState(), 0);
+  assert.deepEqual(session, before);
 });

@@ -31,3 +31,70 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 @media(max-width:680px){.main-shell,#app[data-sidebar=closed] .main-shell{padding:19px 16px 28px}.page-header{margin-bottom:20px;gap:12px}.page-header h1{font-size:22px}.page-header p{font-size:10px;line-height:1.6}.header-leading{gap:11px}.header-actions{gap:0}.icon-button{height:34px;width:34px}.studio-layout{grid-template-columns:1fr;gap:25px;max-width:440px}.video-column{max-width:400px}.stage-title{font-size:10px}.video-stage{height:calc(100svh - 178px);min-height:430px;max-height:660px;aspect-ratio:auto}.camera-placeholder{gap:18px;padding:32px 25px 24px}.athlete-illustration{height:180px;flex:0 1 180px}.athlete-illustration>svg{max-height:180px}.placeholder-copy h2{font-size:26px}.placeholder-copy p{font-size:11px}.primary-button{min-height:48px;font-size:12px}.demo-button{font-size:11px}.coaching-column{padding-top:0;gap:14px}.panel{padding:21px}.goal-card h2{font-size:17px;margin-bottom:19px}.field-label{font-size:12px}.select-wrap select,.goal-input{font-size:13px}.goal-description{font-size:11px}.setup-tip{font-size:11px}.metrics-grid{grid-template-columns:1fr 1fr}.metrics-grid span{font-size:10px}.metric-note{font-size:10px}.insight-item{font-size:12px}.insight-item small{font-size:10px}.feedback-bubble{font-size:12px}.coach-online{font-size:11px}.stage-hint{font-size:9px}.control-button{font-size:10px;min-height:47px}.footer-lock{font-size:7px}.stage-footer .text-button{font-size:9px}.history-section{margin-top:27px}.history-heading h2{font-size:17px}.history-empty h3{font-size:12px}.history-empty p{font-size:11px}#app:is([data-state=live],[data-state=paused]) .main-shell{padding-top:14px}#app:is([data-state=live],[data-state=paused]) .page-header{margin-bottom:13px}#app:is([data-state=live],[data-state=paused]) .page-header p{display:none}#app:is([data-state=live],[data-state=paused]) .video-stage{height:calc(100svh - 205px - env(safe-area-inset-bottom));min-height:330px;max-height:720px}.history-session span{font-size:11px}}
 @media(max-width:370px){.main-shell,#app[data-sidebar=closed] .main-shell{padding-left:12px;padding-right:12px}.page-header h1{font-size:20px}.camera-placeholder{padding-left:20px;padding-right:20px;gap:16px}.athlete-illustration{flex-basis:155px;height:155px}.placeholder-copy h2{font-size:24px}.feedback-bubble{font-size:11px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+
+/* ───── Catalog, lesson HUD, personality, live coach (frontend) ───── */
+.catalog-section{max-width:960px;margin:0 auto 28px}
+.catalog-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:14px}
+.catalog-heading h2{font-size:20px;letter-spacing:-.4px;margin-top:4px}
+.catalog-note{max-width:360px;color:var(--muted);font-size:12px;line-height:1.55;text-align:right}
+.catalog-list{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.skill-card{position:relative;display:flex;flex-direction:column;gap:10px;padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--panel);text-align:left;color:var(--text);transition:border-color .15s,box-shadow .15s,transform .15s}
+.skill-card:hover{border-color:#b7cdbb;transform:translateY(-1px)}
+.skill-card[aria-checked=true]{border-color:var(--accent-strong);box-shadow:0 0 0 2px #4f745a22,0 10px 30px #29472e12}
+.skill-card .skill-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.skill-card .skill-emoji{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:var(--soft);font-size:20px}
+.skill-card .skill-level{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--accent-strong);background:#eaf0e7;padding:4px 8px;border-radius:6px}
+.skill-card h3{font-size:15px;letter-spacing:-.2px}
+.skill-card .skill-tagline{color:var(--muted);font-size:12px;line-height:1.5}
+.skill-card .skill-meta{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;color:#5f7264;margin-top:auto}
+.skill-card .skill-meta span::before{content:'·';margin-right:6px;color:#b4c3b6}
+.skill-card .skill-meta span:first-child::before{content:none}
+.skill-card .skill-check{position:absolute;top:14px;right:14px;display:none;width:22px;height:22px;border-radius:50%;background:var(--accent-strong);color:#fff;place-items:center}
+.skill-card .skill-check svg{width:13px;height:13px;stroke-width:2.4}
+.skill-card[aria-checked=true] .skill-check{display:grid}
+.skill-card[aria-checked=true] .skill-level{visibility:hidden}
+.skill-card:disabled{opacity:.55;transform:none}
+.chosen-skill{display:flex;align-items:center;gap:10px;margin:12px 0 14px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--soft)}
+.chosen-skill .chosen-emoji{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:#fff;font-size:18px}
+.chosen-skill div{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.chosen-skill strong{font-size:13px}.chosen-skill small{color:var(--muted);font-size:11px}
+.chosen-skill .text-button{font-size:11px}
+.personality-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:6px 0 14px}
+.personality-chip{display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 6px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--text);font-size:12px;font-weight:600;transition:border-color .15s,background .15s}
+.personality-chip small{font-weight:400;color:var(--muted);font-size:10px;line-height:1.3;text-align:center}
+.personality-chip[aria-checked=true]{border-color:var(--accent-strong);background:#eef4ec}
+.personality-chip:disabled{opacity:.6}
+.camera-hint{margin-top:8px;padding:8px 10px;border-radius:8px;background:#f3f6f1;color:#5f7264;font-size:11px;line-height:1.5}
+.camera-hint::before{content:'📷 ';}
+.coach-pill{margin-left:6px}
+.lesson-hud{margin-top:8px;padding:9px 11px;border-radius:10px;background:#15271cd9;border:1px solid #adc7b137;color:#eef5ee;backdrop-filter:blur(6px)}
+.lesson-row{display:flex;align-items:baseline;gap:8px}
+.lesson-step{font-size:9px;font-weight:700;letter-spacing:1px;color:#bed4c3}
+.lesson-title{flex:1;min-width:0;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lesson-count{font-size:11px;font-variant-numeric:tabular-nums;color:#d8e4d8}
+.lesson-bar{height:3px;margin:7px 0 6px;border-radius:2px;background:#ffffff22;overflow:hidden}
+.lesson-bar div{height:100%;width:0;border-radius:2px;background:#a8cbb1;transition:width .25s}
+.lesson-goal{font-size:10px;line-height:1.45;color:#d8e4d8}
+.lesson-skip{margin-top:6px;padding:4px 8px;border:1px solid #ffffff30;border-radius:6px;background:transparent;color:#d8e4d8;font-size:10px}
+.lesson-skip:hover{background:#ffffff14}
+.lesson-hud[data-complete=true] .lesson-bar div{background:#e7d98a}
+.lesson-hud[data-complete=true] .lesson-skip{display:none}
+.feedback-item.lesson .feedback-bubble{border-color:#e7d98a70;background:#2b3a22e8}
+.feedback-item.success .feedback-bubble{border-color:#a8cbb180}
+.feedback-item.from-llm .feedback-bubble strong::after{content:'живой тренер';margin-left:6px;padding:1px 6px;border-radius:4px;background:#e7d98a;color:#1a2616;font-size:8px;letter-spacing:.3px;vertical-align:middle}
+.live-coach-box{margin:-4px 0 10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#f6f8f4}
+.model-choice{display:flex;flex-direction:column;gap:6px;font-size:12px}
+.model-choice label{display:flex;align-items:center;gap:8px}
+.live-coach-progress{height:4px;margin:10px 0 8px;border-radius:2px;background:#dfe6de;overflow:hidden}
+.live-coach-progress div{height:100%;width:0;background:var(--accent-strong);transition:width .2s}
+.live-coach-status{font-size:11px;line-height:1.5;color:var(--muted)}
+.summary-live{margin:12px 0 4px;padding:12px 14px;border-radius:12px;background:#f3f6f1;border:1px solid var(--line)}
+.summary-live p{margin-top:6px;font-size:13px;line-height:1.6}
+.live-badge{display:inline-block;padding:2px 8px;border-radius:5px;background:#e7d98a;color:#1a2616;font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
+.summary-notes .summary-row{display:flex;gap:10px;align-items:flex-start;margin-bottom:6px;font-size:13px;line-height:1.55}
+.summary-notes .summary-row b{flex:0 0 112px;font-weight:600;color:#5f7264;font-size:11px;letter-spacing:.4px;text-transform:uppercase;padding-top:2px}
+.ball-marker{position:absolute;z-index:4;pointer-events:none}
+#app:not([data-state=live]):not([data-state=paused]) .lesson-hud{display:none}
+#app[data-mode=demo] .lesson-skip{display:none}
+@media(max-width:900px){.catalog-list{grid-template-columns:repeat(3,1fr);gap:10px}.catalog-note{display:none}}
+@media(max-width:680px){.catalog-section{max-width:440px}.catalog-list{grid-template-columns:1fr;gap:8px}.skill-card{flex-direction:row;align-items:center;gap:12px;padding:12px 14px}.skill-card .skill-top{flex:0 0 auto}.skill-card .skill-level{display:none}.skill-card .skill-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}.skill-card .skill-meta{margin-top:2px}.skill-card .skill-check{top:50%;transform:translateY(-50%)}.personality-chip small{display:none}.lesson-goal{display:none}.lesson-hud{padding:7px 10px}}

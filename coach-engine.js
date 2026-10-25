@@ -1,6 +1,12 @@
-// MediaPipe inference runs on this device; no video frames are uploaded.
+// Vision + coaching engine. MediaPipe inference runs on this device; no video
+// frames leave the browser. Everything below `createCoachEngine` is pure and
+// unit-tested: pose observations, ball tracking, lesson progression, phrases.
+import { getSkill, personalityId } from './skills/index.js';
+import { COMMON_PHRASES, pickPhrase, fillTemplate } from './skills/common.js';
+
 export const MODEL_VERSION = '0.10.21';
 export const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
+export const BALL_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite';
 const CDN_ROOT = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MODEL_VERSION}`;
 
 export const POSE_CONNECTIONS = [
@@ -11,9 +17,10 @@ export const POSE_CONNECTIONS = [
 ];
 
 const CONFIDENCE = 0.55;
-const COOLDOWN = 4000;
-const SKILLS = new Set(['football', 'squats', 'balance']);
-const skillName = (skill) => SKILLS.has(skill) ? skill : 'football';
+const COOLDOWN = { tip: 4000, success: 1500, warning: 2000, lesson: 0 };
+const SAME_TAG_COOLDOWN = 12000;
+const BALL_LOST_MS = 1500;
+const BALL_SPEED = 0.18; // normalized image units per second
 const distance = (a, b, aspect = 1) => Math.hypot((a.x - b.x) * aspect, a.y - b.y);
 
 export function jointAngle(a, b, c, aspectRatio = 1) {
@@ -26,92 +33,90 @@ export function jointAngle(a, b, c, aspectRatio = 1) {
   return Math.acos(Math.max(-1, Math.min(1, (ab.x * cb.x + ab.y * cb.y) / denominator))) * 180 / Math.PI;
 }
 
-export function createAnalysisState(skill = 'football') {
-  return {
-    skill: skillName(skill), movements: 0, reps: 0, samples: 0,
-    ground: [null, null],
-    feet: [{ phase: 'down', frames: 0 }, { phase: 'down', frames: 0 }],
-    lastMovementAt: -Infinity, lastRepAt: -Infinity,
-    squatPhase: 'unready', squatFrames: 0,
-    lastCueAt: -Infinity, lastCueTag: '', quality: 'missing',
-    balanceSince: null, balanceSeconds: 0,
-  };
-}
-
 function visible(p) {
   return Boolean(p && Number.isFinite(p.x) && Number.isFinite(p.y)
     && (p.visibility ?? 1) >= CONFIDENCE && (p.presence ?? 1) >= CONFIDENCE
     && p.x > 0.015 && p.x < 0.985 && p.y > 0.015 && p.y < 0.985);
 }
 
-function cue(state, now, text, kind, tag, urgent = false) {
-  const elapsed = now - state.lastCueAt;
-  if ((!urgent && elapsed < COOLDOWN) || (tag === state.lastCueTag && elapsed < 12000)) return null;
-  state.lastCueAt = now;
-  state.lastCueTag = tag;
-  return { text, kind, tag };
-}
+/* ───────────────────────── Pose observations ───────────────────────── */
 
-function output(state, landmarks, feedback, quality) {
-  state.quality = quality;
+export function createPoseState() {
   return {
-    state, landmarks, feedback, quality,
-    metrics: {
-      movements: state.movements, reps: state.reps,
-      visible: quality === 'good', balanceSeconds: state.balanceSeconds,
-    },
+    samples: 0, lifts: 0, reps: 0,
+    ground: [null, null],
+    feet: [{ phase: 'down', frames: 0 }, { phase: 'down', frames: 0 }],
+    lastLiftAt: -Infinity, lastRepAt: -Infinity,
+    squatPhase: 'unready', squatFrames: 0,
+    balanceSince: null, balanceSeconds: 0,
+    hipTrail: [], quality: 'missing',
   };
 }
 
-/** Pure, deterministic analysis of one landmark frame. Returns the next state. */
-export function analyzePose(landmarks, skill = 'football', previous, timestamp = 0, aspectRatio = 1) {
-  const selected = skillName(skill);
+function emptyObservation(quality, points, state) {
+  return {
+    quality, points, visible: false,
+    kneeAngle: { left: null, right: null, mean: null }, softKnee: false, supportKnee: null,
+    torsoTilt: 0, shoulderSlope: 0, torsoLean: false, armsSpread: true,
+    lift: [0, 0], raised: false, raisedSide: -1, liftCompleted: false, liftHigh: false,
+    standingStill: false, squat: { phase: state.squatPhase, repCompleted: false },
+    balanceSeconds: state.balanceSeconds, lifts: state.lifts, reps: state.reps,
+    hips: null, kneeY: null, feet: [], legScale: 0.2,
+  };
+}
+
+function resetMotion(state) {
+  state.samples = 0;
+  state.ground = [null, null];
+  state.feet = state.feet.map(() => ({ phase: 'down', frames: 0 }));
+  state.squatPhase = 'unready';
+  state.squatFrames = 0;
+  state.balanceSince = null;
+  state.hipTrail = [];
+}
+
+/** Pure, deterministic analysis of one landmark frame. Returns { state, obs }. */
+export function observePose(landmarks, previous, timestamp = 0, aspectRatio = 1, skillId = 'football') {
   const aspect = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1;
-  const old = previous?.skill === selected ? previous : createAnalysisState(selected);
-  const state = { ...old, ground: [...old.ground], feet: old.feet.map(f => ({ ...f })) };
+  const old = previous || createPoseState();
+  const state = { ...old, ground: [...old.ground], feet: old.feet.map(f => ({ ...f })), hipTrail: [...old.hipTrail] };
   const now = Number.isFinite(timestamp) ? timestamp : 0;
   const points = Array.isArray(landmarks) && landmarks.length >= 33 ? landmarks : null;
   const torso = points && [11, 12, 23, 24].filter(i => visible(points[i])).length === 4;
   if (!torso) {
-    const feedback = cue(state, now, 'Пока не вижу тебя целиком. Поставь телефон устойчиво и войди в кадр.', 'warning', 'no-person', old.quality !== 'missing');
-    state.samples = 0;
-    state.ground = [null, null];
-    state.feet = state.feet.map(() => ({ phase: 'down', frames: 0 }));
-    state.squatPhase = 'unready';
-    state.squatFrames = 0;
-    state.balanceSince = null;
-    return output(state, points, feedback, 'missing');
+    resetMotion(state); state.quality = 'missing';
+    return { state, obs: emptyObservation('missing', points, state) };
   }
-
   const legs = [[23, 25, 27], [24, 26, 28]].map(indices => indices.every(i => visible(points[i])));
-  const enoughLegs = selected === 'squats' ? legs.some(Boolean) : legs.every(Boolean);
+  const enoughLegs = skillId === 'squats' ? legs.some(Boolean) : legs.every(Boolean);
   if (!enoughLegs) {
-    const feedback = cue(state, now, 'В кадре должны быть видны колени и стопы. Отойди от телефона немного дальше.', 'warning', 'show-feet', old.quality === 'good');
-    state.samples = 0;
-    state.ground = [null, null];
-    state.feet = state.feet.map(() => ({ phase: 'down', frames: 0 }));
-    state.squatPhase = 'unready';
-    state.squatFrames = 0;
-    state.balanceSince = null;
-    return output(state, points, feedback, 'partial');
+    resetMotion(state); state.quality = 'partial';
+    return { state, obs: emptyObservation('partial', points, state) };
   }
 
   state.samples += 1;
+  state.quality = 'good';
   const leftAngle = legs[0] ? jointAngle(points[23], points[25], points[27], aspect) : null;
   const rightAngle = legs[1] ? jointAngle(points[24], points[26], points[28], aspect) : null;
   const angles = [leftAngle, rightAngle].filter(v => Number.isFinite(v));
-  const kneeAngle = angles.reduce((sum, v) => sum + v, 0) / angles.length;
+  const kneeMean = angles.reduce((sum, v) => sum + v, 0) / angles.length;
   const shoulders = { x: (points[11].x + points[12].x) / 2, y: (points[11].y + points[12].y) / 2 };
   const hips = { x: (points[23].x + points[24].x) / 2, y: (points[23].y + points[24].y) / 2 };
   const ankles = [points[27], points[28]];
   const legScale = Math.max(0.16, Math.max(...ankles.filter(visible).map(p => p.y)) - hips.y);
-  let feedback = null;
+  const kneeY = [points[25], points[26]].filter(visible).reduce((sum, p, _, arr) => sum + p.y / arr.length, 0) || null;
 
-  if (selected === 'squats') {
-    // A full stand -> bent knees -> stand cycle is required. Two frames at each
-    // threshold reject single-frame jitter; thresholds have a large dead band.
-    const standing = kneeAngle > 160;
-    const lowered = kneeAngle < 110;
+  // Stillness: hips barely move over the last ~600 ms.
+  state.hipTrail.push({ t: now, x: hips.x, y: hips.y });
+  state.hipTrail = state.hipTrail.filter(h => now - h.t <= 600);
+  const drift = Math.max(...state.hipTrail.map(h => distance(h, hips, aspect)));
+  const standingStill = state.hipTrail.length >= 3 && drift < legScale * 0.08;
+
+  // Squat cycle: stand -> bent -> stand with two-frame hysteresis.
+  const squat = { phase: state.squatPhase, repCompleted: false };
+  if (skillId === 'squats') {
+    const standing = kneeMean > 160;
+    const lowered = kneeMean < 110;
     if (state.squatPhase === 'unready') {
       state.squatFrames = standing ? state.squatFrames + 1 : 0;
       if (state.squatFrames >= 2) { state.squatPhase = 'standing'; state.squatFrames = 0; }
@@ -121,134 +126,362 @@ export function analyzePose(landmarks, skill = 'football', previous, timestamp =
     } else {
       state.squatFrames = standing ? state.squatFrames + 1 : 0;
       if (state.squatFrames >= 2) {
-        if (now - state.lastRepAt >= 1000) {
-          state.reps += 1;
-          state.movements = state.reps;
-          state.lastRepAt = now;
-          feedback = cue(state, now, `Повтор ${state.reps} завершён. Сохраняй плавное движение.`, 'success', 'squat-complete');
-        }
+        if (now - state.lastRepAt >= 1000) { state.reps += 1; state.lastRepAt = now; squat.repCompleted = true; }
         state.squatPhase = 'standing'; state.squatFrames = 0;
       }
     }
-    if (!feedback) {
-      if (Math.abs(shoulders.x - hips.x) * aspect > legScale * 0.5) {
-        feedback = cue(state, now, 'Корпус заметно наклонён относительно таза. Выпрямись и выбери комфортную глубину.', 'tip', 'squat-torso');
-      } else if (state.squatPhase === 'lowered') {
-        feedback = cue(state, now, 'Сгибание коленей видно. Теперь плавно вернись в исходное положение.', 'tip', 'squat-rise');
-      } else {
-        feedback = cue(state, now, 'Встань боком или под небольшим углом к камере. Колени и стопы должны оставаться видимыми.', 'tip', 'squat-camera');
-      }
-    }
-    return output(state, points, feedback, 'good');
+    squat.phase = state.squatPhase;
   }
 
-  // Calibrate each ankle independently: a foot already held up at the start
-  // must not become a completed lift simply by entering the frame.
+  // Ankle calibration per side: a foot already held up when entering the frame
+  // must not count as a completed lift.
   ankles.forEach((ankle, side) => {
     if (state.ground[side] === null) state.ground[side] = ankle.y;
     if (state.feet[side].phase === 'down') state.ground[side] = Math.max(state.ground[side], ankle.y);
   });
   const raiseThreshold = Math.max(0.035, legScale * 0.14);
   const lowerThreshold = Math.max(0.018, legScale * 0.06);
-  const lifts = ankles.map((ankle, side) => state.ground[side] - ankle.y);
-  let completedLift = false;
+  const lift = ankles.map((ankle, side) => state.ground[side] - ankle.y);
+  let liftCompleted = false;
+  let completedPeak = 0;
   if (state.samples > 5) {
-    lifts.forEach((lift, side) => {
+    lift.forEach((value, side) => {
       const foot = state.feet[side];
       if (foot.phase === 'down') {
-        foot.frames = lift > raiseThreshold ? foot.frames + 1 : 0;
-        if (foot.frames >= 2) { foot.phase = 'up'; foot.frames = 0; }
+        foot.frames = value > raiseThreshold ? foot.frames + 1 : 0;
+        if (foot.frames >= 2) { foot.phase = 'up'; foot.frames = 0; foot.peak = value; }
       } else {
-        foot.frames = lift < lowerThreshold ? foot.frames + 1 : 0;
+        foot.peak = Math.max(foot.peak || 0, value);
+        foot.frames = value < lowerThreshold ? foot.frames + 1 : 0;
         if (foot.frames >= 2) {
-          if (now - state.lastMovementAt >= 400) {
-            state.movements += 1; state.lastMovementAt = now; completedLift = true;
-          }
+          if (now - state.lastLiftAt >= 400) { state.lifts += 1; state.lastLiftAt = now; liftCompleted = true; completedPeak = foot.peak || 0; }
           foot.phase = 'down'; foot.frames = 0;
         }
       }
     });
   }
+  const raisedSide = state.feet.findIndex(f => f.phase === 'up');
+  const raised = raisedSide !== -1;
+  // Height is judged at the peak of the movement, so a completed lift carries its own verdict.
+  const highThreshold = legScale * 0.5;
+  const liftHigh = raised ? lift[raisedSide] > highThreshold : liftCompleted && completedPeak > highThreshold;
+  const supportKnee = raised ? (raisedSide === 0 ? rightAngle : leftAngle) : null;
 
-  const raised = state.feet.some(f => f.phase === 'up');
   const torsoTilt = Math.abs(shoulders.x - hips.x) * aspect / Math.max(0.12, distance(shoulders, hips, aspect));
   const shoulderSlope = Math.abs(points[11].y - points[12].y);
-  if (selected === 'balance') {
+  const torsoLean = Math.abs(shoulders.x - hips.x) * aspect > legScale * 0.5;
+  const wrists = [[15, 11], [16, 12]].filter(([w]) => visible(points[w]));
+  const armsSpread = wrists.length === 0 || wrists.some(([w, s]) => Math.abs(points[w].x - points[s].x) * aspect > legScale * 0.35);
+
+  if (skillId === 'balance') {
     if (raised && torsoTilt < 0.4 && shoulderSlope < 0.08) {
       if (state.balanceSince === null) state.balanceSince = now;
       state.balanceSeconds = Math.max(state.balanceSeconds, Math.floor((now - state.balanceSince) / 1000));
     } else state.balanceSince = null;
-    if (torsoTilt > 0.4 || shoulderSlope > 0.08) {
-      feedback = cue(state, now, 'Вижу наклон корпуса. Попробуй выровнять плечи и держи взгляд перед собой.', 'tip', 'balance-align');
-    } else if (raised) {
-      feedback = cue(state, now, 'Стопа поднята, корпус остаётся ровным. Удерживай удобное положение без спешки.', 'success', 'balance-hold');
-    } else {
-      feedback = cue(state, now, 'Для упражнения на баланс слегка подними одну стопу. При необходимости держись за устойчивую опору.', 'tip', 'balance-start');
-    }
-  } else if (completedLift) {
-    feedback = cue(state, now, 'Вижу подъём и возврат стопы. Продолжай невысокие движения, сохраняя равновесие.', 'success', 'foot-lift');
-  } else if (torsoTilt > 0.55) {
-    feedback = cue(state, now, 'Корпус заметно смещён относительно таза. Попробуй вернуть его ближе к центру опоры.', 'tip', 'football-torso');
-  } else if (raised) {
-    const supportAngle = state.feet[0].phase === 'up' ? rightAngle : leftAngle;
-    if (supportAngle > 175) {
-      feedback = cue(state, now, 'Опорная нога почти прямая. Слегка смягчи колено и делай короткие движения стопой.', 'tip', 'support-knee');
-    } else {
-      feedback = cue(state, now, 'Подъём стопы виден. Для чеканки пробуй короткий импульс и держи мяч невысоко.', 'tip', 'football-lift');
-    }
-  } else {
-    feedback = cue(state, now, 'Ноги видны. Начни с одного невысокого подброса, затем поймай мяч руками и повтори.', 'tip', 'football-start');
   }
-  return output(state, points, feedback, 'good');
+
+  const obs = {
+    quality: 'good', points, visible: true,
+    kneeAngle: { left: leftAngle, right: rightAngle, mean: kneeMean },
+    softKnee: kneeMean < 178, supportKnee,
+    torsoTilt, shoulderSlope, torsoLean, armsSpread,
+    lift, raised, raisedSide, liftCompleted, liftHigh,
+    standingStill: standingStill && !raised, squat,
+    balanceSeconds: state.balanceSeconds, lifts: state.lifts, reps: state.reps,
+    hips, kneeY, legScale,
+    feet: [27, 28, 31, 32].map(i => points[i]).filter(visible).map(p => ({ x: p.x, y: p.y })),
+  };
+  return { state, obs };
 }
 
-export async function createCoachEngine({ onStatus = () => {} } = {}) {
-  let landmarker;
+/* ───────────────────────── Ball tracking ───────────────────────── */
+
+export function createBallState() {
+  return {
+    seen: false, x: null, y: null, r: 0, vy: 0, vx: 0,
+    lastSeenAt: -Infinity, lastSampleAt: -Infinity, phase: null, phaseFrames: 0,
+    touches: 0, streak: 0, bestStreak: 0, lastStreak: 0, drops: 0,
+    lastTouchAt: -Infinity, groundFrames: 0, event: null, awayFromBody: false, everSeen: false,
+  };
+}
+
+/**
+ * Pure ball tracker. `detections` are normalized boxes {x, y, w, h, score}
+ * (centre coordinates). A touch is a downward-to-upward reversal next to a
+ * foot; a drop is the ball resting at ground level after a flight, or lost
+ * low in the frame.
+ */
+export function trackBall(detections, previous, timestamp = 0, obs = null, aspectRatio = 1) {
+  const aspect = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1;
+  const old = previous || createBallState();
+  const state = { ...old, event: null };
+  const now = Number.isFinite(timestamp) ? timestamp : 0;
+  const candidates = Array.isArray(detections) ? detections.filter(d => d && Number.isFinite(d.x) && Number.isFinite(d.y) && (d.score ?? 1) >= 0.3) : [];
+  let best = null;
+  for (const d of candidates) {
+    const near = state.seen ? -distance(d, state, aspect) : 0;
+    const scoreValue = (d.score ?? 1) + near;
+    if (!best || scoreValue > best.scoreValue) best = { ...d, scoreValue };
+  }
+  const inFlight = now - state.lastTouchAt < 2500;
+  const groundY = obs?.feet?.length ? Math.max(...obs.feet.map(p => p.y)) : null;
+
+  if (!best) {
+    if (state.seen && now - state.lastSeenAt > BALL_LOST_MS) {
+      state.seen = false; state.phase = null; state.phaseFrames = 0; state.vy = 0;
+      if (inFlight && state.streak > 0 && obs?.kneeY !== null && state.y !== null && state.y > obs.kneeY) {
+        state.event = 'drop'; state.drops += 1; state.lastStreak = state.streak; state.streak = 0;
+      }
+    }
+    state.awayFromBody = false;
+    return state;
+  }
+
+  const r = Math.max(best.w || 0, best.h || 0) / 2;
+  const dt = state.seen && Number.isFinite(state.lastSampleAt) ? (now - state.lastSampleAt) / 1000 : 0;
+  if (dt > 0 && dt < 1) {
+    const vy = (best.y - state.y) / dt;
+    const vx = (best.x - state.x) / dt;
+    state.vy = state.vy * 0.3 + vy * 0.7;
+    state.vx = state.vx * 0.3 + vx * 0.7;
+  } else { state.vy = 0; state.vx = 0; }
+  state.x = best.x; state.y = best.y; state.r = r;
+  state.seen = true; state.everSeen = true; state.lastSeenAt = now; state.lastSampleAt = now;
+
+  const feet = obs?.feet || [];
+  const nearFoot = feet.some(f => distance(f, best, aspect) < r + Math.max(0.06, (obs?.legScale || 0.2) * 0.3));
+  const lowZone = obs?.kneeY === null || obs?.kneeY === undefined ? true : best.y > obs.kneeY - 0.08;
+
+  const previousPhase = state.phase;
+  if (state.vy > BALL_SPEED) { state.phase = 'down'; state.phaseFrames = previousPhase === 'down' ? state.phaseFrames + 1 : 1; }
+  else if (state.vy < -BALL_SPEED) { state.phase = 'up'; state.phaseFrames = previousPhase === 'up' ? state.phaseFrames + 1 : 1; }
+  else { state.phaseFrames = 0; }
+
+  if (previousPhase === 'down' && state.phase === 'up' && nearFoot && lowZone && now - state.lastTouchAt > 250) {
+    state.touches += 1; state.streak += 1; state.bestStreak = Math.max(state.bestStreak, state.streak);
+    state.lastTouchAt = now; state.event = 'touch'; state.groundFrames = 0;
+  }
+
+  const onGround = groundY !== null && best.y + r >= groundY - 0.02 && Math.abs(state.vy) < BALL_SPEED;
+  state.groundFrames = onGround ? state.groundFrames + 1 : 0;
+  if (state.groundFrames >= 2 && state.streak > 0 && now - state.lastTouchAt > 400) {
+    state.event = 'drop'; state.drops += 1; state.lastStreak = state.streak; state.streak = 0; state.groundFrames = 0;
+  }
+  state.awayFromBody = Boolean(obs?.hips) && Math.abs(best.x - obs.hips.x) * aspect > (obs.legScale || 0.2) * 0.7 && lowZone;
+  return state;
+}
+
+/* ───────────────────────── Coaching session ───────────────────────── */
+
+export function createSession(skillId = 'football', { personality = 'calm' } = {}) {
+  const skill = getSkill(skillId);
+  return {
+    skillId: skill.id, personality: personalityId(personality),
+    lessonIndex: 0, lessonProgress: 0, lessonMemo: null, completedLessons: [], skippedLessons: [],
+    courseComplete: false, pendingIntro: true,
+    lastCueAt: -Infinity, lastCueTag: '', lastCueKind: '', phraseIndex: {}, cueCount: 0, tagCounts: {},
+    lastQuality: 'missing',
+  };
+}
+
+/** Lesson HUD data for a session. */
+export function describeLesson(session) { return lessonView(getSkill(session.skillId), session); }
+
+function lessonView(skill, session) {
+  const lesson = skill.lessons[session.lessonIndex] || null;
+  return {
+    index: session.lessonIndex, total: skill.lessons.length,
+    title: lesson?.title || 'Свободная практика', short: lesson?.short || 'Практика',
+    goal: lesson?.goal || 'Все шаги выполнены. Продолжай в своём темпе.',
+    progress: lesson ? Math.min(lesson.target, Math.floor(session.lessonProgress * 10) / 10) : 0,
+    target: lesson?.target || 0, unit: lesson?.unit || '', needsBall: Boolean(lesson?.needsBall),
+    complete: session.courseComplete,
+  };
+}
+
+function emit(session, now, tag, kind, bank, vars, { urgent = false, source = 'rule' } = {}) {
+  const elapsed = now - session.lastCueAt;
+  if (!urgent && elapsed < (COOLDOWN[kind] ?? COOLDOWN.tip)) return null;
+  if (tag === session.lastCueTag && elapsed < SAME_TAG_COOLDOWN && !urgent) return null;
+  const picked = pickPhrase(bank, session.personality, session.phraseIndex[tag] ?? -1, session.cueCount * 7 + session.lessonIndex * 3);
+  if (!picked.text) return null;
+  session.phraseIndex = { ...session.phraseIndex, [tag]: picked.index };
+  session.lastCueAt = now; session.lastCueTag = tag; session.lastCueKind = kind;
+  session.cueCount += 1;
+  session.tagCounts = { ...session.tagCounts, [tag]: (session.tagCounts[tag] || 0) + 1 };
+  return { text: fillTemplate(picked.text, vars), kind, tag, source };
+}
+
+/** Advances lessons and selects one coaching phrase. Pure: returns a new session. */
+export function stepSession(previous, obs, ball, timestamp = 0) {
+  const session = { ...previous, completedLessons: [...previous.completedLessons], skippedLessons: [...previous.skippedLessons] };
+  const skill = getSkill(session.skillId);
+  const now = Number.isFinite(timestamp) ? timestamp : 0;
+  const safeBall = ball || createBallState();
+  const lesson = skill.lessons[session.lessonIndex] || null;
+  const vars = {
+    touches: safeBall.touches, streak: safeBall.event === 'drop' ? safeBall.lastStreak : safeBall.streak,
+    lifts: obs.lifts, reps: obs.reps, balanceSeconds: obs.balanceSeconds,
+    lesson: lesson?.title || '', next: skill.lessons[session.lessonIndex + 1]?.title || '',
+  };
+  let feedback = null;
+  const ctx = { obs, ball: safeBall, now, session, lesson };
+
+  if (session.pendingIntro && lesson) {
+    session.pendingIntro = false;
+    feedback = emit(session, now, 'lesson-intro', 'lesson', { [session.personality]: [lesson.intro[session.personality] || lesson.intro.calm] }, vars, { urgent: true, source: 'lesson' });
+  }
+
+  if (obs.quality !== 'good') {
+    const tag = obs.quality === 'missing' ? 'no-person' : 'show-feet';
+    const urgent = session.lastQuality === 'good' || (tag === 'no-person' && session.lastQuality === 'partial');
+    session.lastQuality = obs.quality;
+    if (!feedback) feedback = emit(session, now, tag, 'warning', COMMON_PHRASES[tag], vars, { urgent });
+    return finish(skill, session, feedback, obs, safeBall);
+  }
+  session.lastQuality = 'good';
+
+  if (lesson && !session.courseComplete && !session.pendingIntro) {
+    const { progress, memo } = lesson.update(ctx, session.lessonMemo ?? undefined);
+    session.lessonProgress = progress; session.lessonMemo = memo;
+    if (progress >= lesson.target) {
+      session.completedLessons.push(lesson.id);
+      session.lessonIndex += 1; session.lessonProgress = 0; session.lessonMemo = null;
+      const done = session.lessonIndex >= skill.lessons.length;
+      if (done) session.courseComplete = true; else session.pendingIntro = true;
+      feedback = emit(session, now, done ? 'course-complete' : 'lesson-complete', 'success', COMMON_PHRASES[done ? 'course-complete' : 'lesson-complete'], vars, { urgent: true, source: 'lesson' });
+      return finish(skill, session, feedback, obs, safeBall);
+    }
+  }
+
+  if (!feedback) {
+    const rule = skill.rules.find(r => r.when(ctx));
+    if (rule) feedback = emit(session, now, rule.tag, rule.kind, skill.phrases[rule.tag], vars, { urgent: Boolean(rule.urgent) });
+  }
+  return finish(skill, session, feedback, obs, safeBall);
+}
+
+function finish(skill, session, feedback, obs, ball) {
+  return {
+    session, feedback, lesson: lessonView(skill, session),
+    metrics: {
+      touches: ball.touches, streak: ball.streak, bestStreak: ball.bestStreak, drops: ball.drops,
+      ballSeen: ball.seen, ballEverSeen: ball.everSeen,
+      lifts: obs.lifts, reps: obs.reps, balanceSeconds: obs.balanceSeconds,
+      visible: obs.quality === 'good', lessonsDone: session.completedLessons.length, cues: session.cueCount,
+    },
+  };
+}
+
+/** Manual skip (for example, no ball available). Recorded honestly. */
+export function skipLesson(previous) {
+  const skill = getSkill(previous.skillId);
+  const lesson = skill.lessons[previous.lessonIndex];
+  if (!lesson || previous.courseComplete) return previous;
+  const session = { ...previous, skippedLessons: [...previous.skippedLessons, lesson.id], lessonIndex: previous.lessonIndex + 1, lessonProgress: 0, lessonMemo: null };
+  if (session.lessonIndex >= skill.lessons.length) session.courseComplete = true; else session.pendingIntro = true;
+  return session;
+}
+
+/** Most frequent corrective tag: the "main mistake" for the summary. */
+export function mainMistake(session) {
+  const corrective = Object.entries(session.tagCounts || {}).filter(([tag]) => !['start', 'lesson-intro', 'lesson-complete', 'course-complete', 'no-person', 'show-feet', 'ball-touch', 'ball-streak', 'lift-done', 'squat-complete', 'balance-hold', 'squat-camera', 'balance-start'].includes(tag));
+  corrective.sort((a, b) => b[1] - a[1]);
+  return corrective[0] ? { tag: corrective[0][0], count: corrective[0][1] } : null;
+}
+
+/* ───────────────────────── Browser wiring ───────────────────────── */
+
+export async function createCoachEngine({ onStatus = () => {}, ball = true } = {}) {
+  let landmarker; let detector = null;
   try {
     onStatus('Загружаем AI-модель позы…');
-    const { FilesetResolver, PoseLandmarker } = await import(`${CDN_ROOT}/vision_bundle.mjs`);
+    const { FilesetResolver, PoseLandmarker, ObjectDetector } = await import(`${CDN_ROOT}/vision_bundle.mjs`);
     const vision = await FilesetResolver.forVisionTasks(`${CDN_ROOT}/wasm`);
     const options = {
       baseOptions: { modelAssetPath: MODEL_URL, delegate: 'GPU' },
       runningMode: 'VIDEO', numPoses: 1,
-      minPoseDetectionConfidence: 0.55,
-      minPosePresenceConfidence: 0.55,
-      minTrackingConfidence: 0.55,
+      minPoseDetectionConfidence: 0.55, minPosePresenceConfidence: 0.55, minTrackingConfidence: 0.55,
       outputSegmentationMasks: false,
     };
     try {
       landmarker = await PoseLandmarker.createFromOptions(vision, options);
     } catch {
       onStatus('Подключаем совместимый режим AI…');
-      landmarker = await PoseLandmarker.createFromOptions(vision, {
-        ...options, baseOptions: { ...options.baseOptions, delegate: 'CPU' },
-      });
+      landmarker = await PoseLandmarker.createFromOptions(vision, { ...options, baseOptions: { ...options.baseOptions, delegate: 'CPU' } });
     }
-    onStatus('AI-модель готова · анализ на устройстве');
+    if (ball) {
+      onStatus('Загружаем детектор мяча…');
+      const ballOptions = { baseOptions: { modelAssetPath: BALL_MODEL_URL, delegate: 'GPU' }, runningMode: 'VIDEO', scoreThreshold: 0.3, maxResults: 3, categoryAllowlist: ['sports ball'] };
+      try { detector = await ObjectDetector.createFromOptions(vision, ballOptions); }
+      catch {
+        try { detector = await ObjectDetector.createFromOptions(vision, { ...ballOptions, baseOptions: { ...ballOptions.baseOptions, delegate: 'CPU' } }); }
+        catch (cause) { console.warn('AI-Coach: ball detector unavailable', cause); detector = null; }
+      }
+    }
+    onStatus(detector ? 'AI-модели готовы · поза и мяч на устройстве' : 'AI-модель готова · поза на устройстве, мяч не отслеживается');
   } catch (cause) {
     landmarker?.close();
     const error = new Error('Не удалось загрузить AI-модель. Проверь интернет и попробуй ещё раз. Можно открыть демо без камеры.');
     error.cause = cause;
     throw error;
   }
-  let state = createAnalysisState();
+
+  let pose = createPoseState();
+  let ballState = createBallState();
+  let session = createSession();
   let closed = false;
   let lastTimestamp = -1;
+  let lastBallAt = -Infinity;
+  let ballInterval = 160;
+  let lastDetections = [];
+
   return {
-    analyze(video, timestamp, skill = 'football') {
+    hasBallDetector: Boolean(detector),
+    start(skillId = 'football', personality = 'calm') {
+      pose = createPoseState(); ballState = createBallState(); session = createSession(skillId, { personality });
+      lastTimestamp = -1; lastBallAt = -Infinity; lastDetections = [];
+    },
+    skip() { session = skipLesson(session); },
+    get session() { return session; },
+    analyze(video, timestamp) {
       if (closed) throw new Error('AI-сессия уже завершена. Начни новую тренировку.');
-      if (!video || video.readyState < 2 || !video.videoWidth) {
-        return { landmarks: null, feedback: null, metrics: { movements: state.movements, reps: state.reps, visible: false }, quality: 'missing' };
-      }
+      if (!video || video.readyState < 2 || !video.videoWidth) return null;
       const frameTimestamp = Math.max(lastTimestamp + 1, Number.isFinite(timestamp) ? timestamp : performance.now());
       lastTimestamp = frameTimestamp;
+      const aspect = video.videoWidth / video.videoHeight;
+      const started = performance.now();
       const result = landmarker.detectForVideo(video, frameTimestamp);
-      const analyzed = analyzePose(result.landmarks?.[0] ?? null, skill, state, frameTimestamp, video.videoWidth / video.videoHeight);
-      state = analyzed.state;
-      const { state: _state, ...publicResult } = analyzed;
-      return publicResult;
+      const observed = observePose(result.landmarks?.[0] ?? null, pose, frameTimestamp, aspect, session.skillId);
+      pose = observed.state;
+      const poseMs = performance.now() - started;
+      const skillNeedsBall = getSkill(session.skillId).needsBall;
+      if (detector && skillNeedsBall && frameTimestamp - lastBallAt >= ballInterval) {
+        lastBallAt = frameTimestamp;
+        const detected = detector.detectForVideo(video, frameTimestamp);
+        lastDetections = (detected.detections || []).filter(d => d.boundingBox).map(d => ({
+          x: (d.boundingBox.originX + d.boundingBox.width / 2) / video.videoWidth,
+          y: (d.boundingBox.originY + d.boundingBox.height / 2) / video.videoHeight,
+          w: d.boundingBox.width / video.videoWidth, h: d.boundingBox.height / video.videoHeight,
+          score: d.categories?.[0]?.score ?? 0,
+        }));
+        ballState = trackBall(lastDetections, ballState, frameTimestamp, observed.obs, aspect);
+        // Pose keeps priority: slow frames push the ball detector to a lower rate.
+        const total = performance.now() - started;
+        ballInterval = total > 110 ? Math.min(400, ballInterval + 40) : Math.max(120, ballInterval - 10);
+      } else if (!detector || !skillNeedsBall) {
+        ballState = { ...ballState, event: null };
+      } else {
+        ballState = { ...ballState, event: null };
+      }
+      const stepped = stepSession(session, observed.obs, ballState, frameTimestamp);
+      session = stepped.session;
+      return {
+        landmarks: observed.obs.points, ball: ballState.seen ? { x: ballState.x, y: ballState.y, r: ballState.r } : null,
+        quality: observed.obs.quality, feedback: stepped.feedback, lesson: stepped.lesson, metrics: stepped.metrics,
+        timing: { poseMs }, ballDetector: Boolean(detector),
+      };
     },
-    reset(skill = 'football') { state = createAnalysisState(skill); },
-    close() { if (!closed) { closed = true; landmarker.close(); } },
+    close() { if (!closed) { closed = true; landmarker.close(); detector?.close(); } },
   };
 }
