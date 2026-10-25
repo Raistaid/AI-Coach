@@ -100,6 +100,16 @@
     <div id="catalogGrid" class="catalog"></div>
   </section>
 
+  <section class="screen screen-start" data-screen="start" aria-label="Эфир">
+    <header class="topbar"><div class="topbar-title"><div><strong>Эфир</strong><small>Выбери навык и начни тренировку</small></div></div></header>
+    <div id="startList" class="start-list" role="radiogroup" aria-label="Навык для эфира"></div>
+    <div class="start-actions">
+      <p class="camera-hint"><svg class="ic"><use href="#i-camera"/></svg><span id="startCamera"></span></p>
+      <button id="startLive" class="btn-primary" type="button"><svg class="ic"><use href="#i-camera"/></svg> <span id="startLiveLabel">Начать эфир</span></button>
+      <div class="sheet-row"><button id="startDemo" class="btn-ghost" type="button">Демо без камеры</button><button id="startFile" class="btn-ghost" type="button"><svg class="ic"><use href="#i-film"/></svg> Открыть видео</button></div>
+    </div>
+  </section>
+
   <section class="screen screen-progress" data-screen="progress" aria-label="Прогресс">
     <header class="topbar"><div class="topbar-title"><div><strong>Прогресс</strong><small>Только то, что увидели модели на устройстве</small></div></div><button id="clearHistory" class="icon-btn" aria-label="Очистить историю"><svg class="ic"><use href="#i-trash"/></svg></button></header>
     <div class="stats three">
@@ -170,7 +180,7 @@
   <nav class="tabbar" aria-label="Разделы">
     <button class="tab" data-tab="chat" aria-label="Чат" aria-current="page"><svg class="ic"><use href="#i-chat"/></svg><span class="tab-label">Чат</span></button>
     <button class="tab" data-tab="catalog" aria-label="Навыки"><svg class="ic"><use href="#i-grid"/></svg><span class="tab-label">Навыки</span></button>
-    <button class="tab tab-live" data-tab="live" aria-label="Начать эфир"><span class="tab-fab"><svg class="ic"><use href="#i-add"/></svg></span><span class="tab-label">Эфир</span></button>
+    <button class="tab" data-tab="start" aria-label="Эфир"><svg class="ic"><use href="#i-camera"/></svg><span class="tab-label">Эфир</span></button>
     <button class="tab" data-tab="progress" aria-label="Прогресс"><svg class="ic"><use href="#i-chart"/></svg><span class="tab-label">Прогресс</span></button>
     <button class="tab tab-profile" data-tab="profile" aria-label="Профиль"><span id="tabAvatar" class="avatar tiny"></span><span class="tab-label">Профиль</span></button>
   </nav>
@@ -218,7 +228,7 @@
       <header class="live-top">
         <span class="live-badge" id="liveBadge">LIVE</span>
         <button class="live-timer" id="liveTimer" type="button" aria-label="Время эфира. Нажми, чтобы показать технические данные">00:00</button>
-        <button id="liveMore" class="glass-btn" type="button" aria-label="Настройки эфира" aria-haspopup="menu" aria-expanded="false" aria-controls="liveMenu"><svg class="ic"><use href="#i-more"/></svg></button>
+        <button id="liveMore" class="glass-btn" type="button" aria-label="Настройки эфира" aria-expanded="false" aria-controls="liveMenu"><svg class="ic"><use href="#i-more"/></svg></button>
       </header>
 
       <div class="lesson-card" id="lessonHud" role="status" aria-live="polite">
@@ -239,14 +249,13 @@
         <button id="liveClose" class="ctrl stop" type="button" aria-label="Завершить эфир"><svg class="ic"><use href="#i-stop"/></svg><span>Завершить</span></button>
       </nav>
 
-      <div id="liveMenu" class="live-menu" role="menu" aria-label="Настройки эфира" hidden>
-        <button id="liveFlip" class="menu-item" role="menuitem" type="button"><svg class="ic"><use href="#i-flip"/></svg><span>Сменить камеру</span></button>
-        <button id="liveLens" class="menu-item" role="menuitemcheckbox" aria-checked="false" type="button" hidden><svg class="ic"><use href="#i-lens"/></svg><span>Широкий угол 0.5×</span></button>
-        <button id="liveFit" class="menu-item" role="menuitemcheckbox" aria-checked="true" type="button"><svg class="ic"><use href="#i-fit"/></svg><span>Весь кадр без обрезки</span></button>
-        <button id="liveVoice" class="menu-item" role="menuitemcheckbox" aria-checked="true" type="button"><svg class="ic"><use href="#i-voice"/></svg><span>Голос тренера</span></button>
-        <button id="liveSkeleton" class="menu-item" role="menuitemcheckbox" aria-checked="true" type="button"><svg class="ic"><use href="#i-skeleton"/></svg><span>Разметка тела</span></button>
-        <button id="liveFar" class="menu-item" role="menuitemcheckbox" aria-checked="false" type="button"><svg class="ic"><use href="#i-expand"/></svg><span>Крупный текст</span></button>
-        <button id="liveSkip" class="menu-item" role="menuitem" type="button"><svg class="ic"><use href="#i-skip"/></svg><span>Пропустить шаг</span></button>
+      <div id="liveMenu" class="live-menu" role="group" aria-label="Настройки эфира" hidden>
+        <div class="menu-group"><span class="menu-label" id="cameraLabel">Камера</span><div id="cameraChoice" class="segmented dark" role="radiogroup" aria-labelledby="cameraLabel"><button id="camUser" class="segment" role="radio" aria-checked="true" type="button">Фронтальная</button><button id="camRear" class="segment" role="radio" aria-checked="false" type="button">Задняя</button><button id="camWide" class="segment" role="radio" aria-checked="false" type="button" hidden>Задняя 0.5×</button></div></div>
+        <div class="menu-group"><span class="menu-label" id="fitLabel">Масштаб</span><div id="fitChoice" class="segmented dark" role="radiogroup" aria-labelledby="fitLabel"><button id="fitContain" class="segment" role="radio" aria-checked="true" type="button">Весь кадр</button><button id="fitCover" class="segment" role="radio" aria-checked="false" type="button">На весь экран</button></div></div>
+        <button id="liveVoice" class="menu-item" role="switch" aria-checked="true" type="button"><svg class="ic"><use href="#i-voice"/></svg><span>Голос тренера</span></button>
+        <button id="liveSkeleton" class="menu-item" role="switch" aria-checked="true" type="button"><svg class="ic"><use href="#i-skeleton"/></svg><span>Разметка тела</span></button>
+        <button id="liveFar" class="menu-item" role="switch" aria-checked="false" type="button"><svg class="ic"><use href="#i-expand"/></svg><span>Крупный текст</span></button>
+        <button id="liveSkip" class="menu-item" type="button"><svg class="ic"><use href="#i-skip"/></svg><span>Пропустить шаг</span></button>
       </div>
 
       <section id="liveQuestionPanel" class="live-question" aria-label="Вопрос тренеру" hidden>

@@ -53,12 +53,12 @@ function showScreen(name) {
   if (name === 'progress') renderProgress();
   if (name === 'profile') { renderProfile(); modelManager.refresh(); trainerAudio.refresh(); }
   if (name === 'catalog') renderCatalog();
+  if (name === 'start') renderStart();
   if (name !== 'chat') document.querySelector(`.screen-${name}`)?.scrollTo({ top: 0 });
   if (drawerOpen) setDrawer(false, { focus: false });
 }
 document.querySelectorAll('.tab[data-tab]').forEach(tab => tab.addEventListener('click', () => {
   haptic(6);
-  if (tab.dataset.tab === 'live') { openSkillSheet(prefs.skill); return; }
   if (tab.dataset.tab === app.dataset.screen) { document.querySelector(`.screen-${app.dataset.screen === 'chat' ? 'chat .chat-list' : app.dataset.screen}`)?.scrollTo({ top: app.dataset.screen === 'chat' ? 1e9 : 0, behavior: 'smooth' }); return; }
   showScreen(tab.dataset.tab);
 }));
@@ -193,6 +193,30 @@ $('skillDemo').addEventListener('click', () => { closeSheet(); chat.introduceSki
 $('skillFile').addEventListener('click', () => { live.unlockSpeech(); live.ensureAudio(); $('videoFile').click(); });
 $('videoFile').addEventListener('change', (event) => { const file = event.target.files[0]; event.target.value = ''; if (!file) return; closeSheet(); chat.introduceSkill(sheetSkillId); startSession({ skillId: sheetSkillId, mode: 'file', file }); });
 document.querySelector('[data-sheet-backdrop]').addEventListener('click', closeSheet);
+
+/* ───────────── Start screen: pick a skill from the list, then train it ───────────── */
+function renderStart() {
+  const list = $('startList'); list.replaceChildren();
+  const current = getSkill(prefs.skill);
+  for (const category of CATEGORIES) {
+    const skills = SKILL_LIST.filter(skill => skill.category === category.id);
+    if (!skills.length) continue;
+    list.append(el('div', 'start-group', category.name));
+    for (const skill of skills) {
+      const row = el('button', 'start-row'); row.type = 'button'; row.setAttribute('role', 'radio'); row.setAttribute('aria-checked', String(skill.id === current.id));
+      const copy = el('div'); copy.append(el('b', null, skill.name), el('small', null, `${skill.level} · ${steps(skill.lessons.length)} · ${skill.minutes} мин${skill.needsBall ? ' · нужен мяч' : ''}`));
+      const check = el('span', 'check'); check.append(icon('i-check'));
+      row.append(el('span', 'skill-emoji', skill.emoji), copy, check);
+      row.addEventListener('click', () => { prefs.skill = skill.id; store.savePrefs(prefs); bus.emit('prefs-changed'); renderStart(); haptic(6); });
+      list.append(row);
+    }
+  }
+  text('startCamera', current.camera);
+  text('startLiveLabel', `Начать эфир: ${current.name}`);
+}
+$('startLive').addEventListener('click', () => { chat.introduceSkill(prefs.skill); startSession({ skillId: prefs.skill, mode: 'camera' }); });
+$('startDemo').addEventListener('click', () => { chat.introduceSkill(prefs.skill); startSession({ skillId: prefs.skill, mode: 'demo' }); });
+$('startFile').addEventListener('click', () => { sheetSkillId = prefs.skill; live.unlockSpeech(); live.ensureAudio(); $('videoFile').click(); });
 
 /* ───────────── Progress ───────────── */
 function renderProgress() {

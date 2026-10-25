@@ -64,14 +64,12 @@ export function initLive({ prefs, profile, ensureLiveCoach, getLiveCoach, onHist
     if (mode === 'demo' || !engine || state !== 'live') return;
     engine.skip(); toast('Шаг пропущен. Он отмечен как невыполненный.');
   });
-  $('liveFlip').addEventListener('click', () => { setMenu(false); flipCamera(); });
-  $('liveFit').addEventListener('click', () => {
-    ctx.prefs.fit = ctx.prefs.fit === 'cover' ? 'contain' : 'cover'; store.savePrefs(ctx.prefs); applyPrefs(); haptic(6);
-  });
-  $('liveLens').addEventListener('click', () => {
-    setMenu(false); ctx.prefs.wide = !lens.active; store.savePrefs(ctx.prefs);
-    restartCamera(() => (lens.active ? 'Широкий угол 0.5×' : 'Обычный угол 1×'));
-  });
+  // Camera and scale are explicit choices, not toggles: the menu shows what is really active.
+  $('camUser').addEventListener('click', () => chooseCamera('user', false));
+  $('camRear').addEventListener('click', () => chooseCamera('environment', false));
+  $('camWide').addEventListener('click', () => chooseCamera('environment', true));
+  $('fitContain').addEventListener('click', () => chooseFit('contain'));
+  $('fitCover').addEventListener('click', () => chooseFit('cover'));
   $('liveTimer').addEventListener('click', () => { debugOn = !debugOn; renderDebug(); });
   $('liveVoice').addEventListener('click', () => { ctx.prefs.voice = !ctx.prefs.voice; store.savePrefs(ctx.prefs); applyPrefs(); if (!ctx.prefs.voice) voice.stop(); bus.emit('prefs-changed'); });
   $('liveSkeleton').addEventListener('click', () => { ctx.prefs.skeleton = !ctx.prefs.skeleton; store.savePrefs(ctx.prefs); applyPrefs(); bus.emit('prefs-changed'); });
@@ -144,13 +142,48 @@ export function applyPrefs() {
   if (overlay) overlay.style.transform = mirror ? 'scaleX(-1)' : '';
   const whole = ctx.prefs.fit !== 'cover';
   if (video) video.style.objectFit = whole ? 'contain' : 'cover';
-  $('liveFit').setAttribute('aria-checked', String(whole));
-  renderFar();
+  $('fitContain').setAttribute('aria-checked', String(whole));
+  $('fitCover').setAttribute('aria-checked', String(!whole));
+  renderCamera(); renderFar();
+}
+function chooseFit(fit) {
+  if (ctx.prefs.fit === fit) return;
+  ctx.prefs.fit = fit; store.savePrefs(ctx.prefs); applyPrefs(); haptic(6);
+}
+/** Which camera is really on: from the track's own settings, not from what was asked for. */
+function activeCamera() {
+  const settings = stream?.getVideoTracks()[0]?.getSettings?.() || {};
+  const facing = settings.facingMode === 'user' || settings.facingMode === 'environment' ? settings.facingMode : facingMode;
+  const wide = facing === 'environment' && Boolean(lens.ultraId) && settings.deviceId === lens.ultraId;
+  return { facing, wide };
+}
+function renderCamera() {
+  if (!$('camUser')) return;
+  const { facing, wide } = activeCamera();
+  const locked = source !== 'camera' || mode === 'demo';
+  $('camUser').setAttribute('aria-checked', String(facing === 'user'));
+  $('camRear').setAttribute('aria-checked', String(facing === 'environment' && !wide));
+  $('camWide').setAttribute('aria-checked', String(facing === 'environment' && wide));
+  $('camWide').hidden = !lens.ultraId;
+  for (const id of ['camUser', 'camRear', 'camWide']) $(id).disabled = locked || switching;
+}
+async function chooseCamera(facing, wide) {
+  const current = activeCamera();
+  if (current.facing === facing && current.wide === wide) { setMenu(false); return; }
+  setMenu(false);
+  const previous = { facingMode, wide: ctx.prefs.wide };
+  facingMode = facing; ctx.prefs.wide = wide;
+  await restartCamera(() => {
+    const actual = activeCamera();
+    ctx.prefs.facing = actual.facing; store.savePrefs(ctx.prefs);
+    if (wide && !actual.wide) return 'Широкий угол недоступен: обычная задняя камера';
+    return actual.facing === 'user' ? 'Фронтальная камера' : actual.wide ? 'Задняя камера · широкий угол 0.5×' : 'Задняя камера';
+  }, () => { facingMode = previous.facingMode; ctx.prefs.wide = previous.wide; });
 }
 function setMenu(open) {
   $('liveMenu').hidden = !open;
   $('liveMore').setAttribute('aria-expanded', String(open));
-  if (open) $('liveMenu').querySelector('.menu-item:not([hidden]):not(:disabled)')?.focus({ preventScroll: true });
+  if (open) $('liveMenu').querySelector('[aria-checked="true"]:not(:disabled), .menu-item:not([hidden]):not(:disabled)')?.focus({ preventScroll: true });
 }
 
 /* ───────────── Start / stop ───────────── */
@@ -183,7 +216,7 @@ export async function startLive({ skillId, mode: newMode = 'camera', file = null
       if (!navigator.mediaDevices?.getUserMedia) throw new Error('Этот браузер не поддерживает камеру. Открой сайт в Safari или Chrome.');
       const media = await openCamera();
       if (generation !== run) { media.getTracks().forEach(t => t.stop()); return; }
-      attachStream(media); await video.play(); renderLens();
+      attachStream(media); await video.play(); renderCamera();
       await ensureEngine(run); if (generation !== run) return;
     }
     engine.start(sessionSkill, ctx.prefs.personality); beginLive(run);
@@ -196,15 +229,14 @@ function resetSession(newMode, newSource) {
   elapsedMs = 0; cues = []; lastAnalysis = 0; lastVideoTime = -1; lastResult = null; frames = { good: 0, total: 0 }; lastLiveAt = 0; lastCount = 0;
   farState = { far: false, frames: 0 }; farManual = null; text('farText', ''); text('farStep', ''); guideSince = null; muted = false;
   tally = { key: null, count: 0, times: [], words: null }; rate = { n: 0, since: 0, fps: 0, poseMs: 0 };
-  lens = { ultraId: null, active: false }; renderLens(); renderDebug(); setMenu(false); renderGuide(null);
+  lens = { ultraId: null, active: false }; renderDebug(); setMenu(false); renderGuide(null);
   $('feedbackList').replaceChildren(); $('liveError').hidden = true;
   text('liveTimer', '00:00'); text('liveMetricValue', '0');
   $('liveQuestionInput').value = ''; text('liveQuestionReply', ''); $('liveQuestionReply').hidden = true;
   const skill = getSkill(sessionSkill);
   text('liveMetricLabel', skill.metric.unit === 'с' ? 'секунд' : (skill.metric.fallbackLabel || skill.metric.label));
   text('liveBadge', mode === 'demo' ? 'ДЕМО' : source === 'file' ? 'ВИДЕО' : 'LIVE'); $('liveBadge').dataset.kind = mode === 'demo' ? 'demo' : source;
-  $('liveFlip').disabled = mode === 'demo' || source === 'file';
-  $('liveFit').disabled = mode === 'demo';
+  for (const id of ['fitContain', 'fitCover']) $(id).disabled = mode === 'demo';
   $('liveSkip').disabled = mode === 'demo';
   applyPrefs();
   return generation;
@@ -286,12 +318,12 @@ async function requestCamera(extra) {
 async function openCamera() {
   let media = await requestCamera({ facingMode: { ideal: facingMode } });
   lens = { ultraId: null, active: false };
-  if (facingMode === 'environment') {
-    try {
-      const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
-      const ultra = cams.find(d => ULTRA_WIDE.test(d.label));
-      if (ultra) {
-        lens.ultraId = ultra.deviceId;
+  try {
+    const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+    const ultra = cams.find(d => ULTRA_WIDE.test(d.label));
+    if (ultra) lens.ultraId = ultra.deviceId; // the menu offers 0.5× from either side
+    if (ultra && facingMode === 'environment') {
+      {
         if (media.getVideoTracks()[0]?.getSettings?.().deviceId === ultra.deviceId) lens.active = true;
         else if (ctx.prefs.wide) {
           media.getTracks().forEach(t => t.stop()); // iOS mutes the first stream when a second camera opens
@@ -300,8 +332,8 @@ async function openCamera() {
           lens.active = Boolean(wide);
         }
       }
-    } catch { /* the lens choice is optional */ }
-  }
+    }
+  } catch { /* the lens choice is optional */ }
   // Cameras with optical or digital zoom start at their widest setting.
   const track = media.getVideoTracks()[0];
   try {
@@ -323,11 +355,6 @@ function attachStream(media) {
   };
 }
 const trackAlive = () => stream?.getVideoTracks().some(t => t.readyState === 'live');
-function renderLens() {
-  const button = $('liveLens');
-  button.hidden = !lens.ultraId || source !== 'camera';
-  button.setAttribute('aria-checked', String(lens.active));
-}
 async function restartCamera(message, onFail) {
   if (!['live', 'paused'].includes(state) || source !== 'camera' || switching) return;
   switching = true;
@@ -337,17 +364,9 @@ async function restartCamera(message, onFail) {
     if (run !== generation) { media.getTracks().forEach(t => t.stop()); return; }
     attachStream(media); await video.play(); if (run !== generation) return;
     engine?.resetTracking?.(); // the old frame geometry means nothing for the new camera
-    lastVideoTime = -1; applyPrefs(); renderLens(); beginLive(run); toast(message());
+    lastVideoTime = -1; applyPrefs(); beginLive(run); toast(message());
   } catch (error) { onFail?.(); if (run === generation) showError(error); }
-  finally { switching = false; }
-}
-async function flipCamera() {
-  if (!['live', 'paused'].includes(state) || source !== 'camera' || switching) return;
-  const previous = facingMode; facingMode = facingMode === 'user' ? 'environment' : 'user';
-  await restartCamera(() => {
-    ctx.prefs.facing = facingMode; store.savePrefs(ctx.prefs);
-    return facingMode === 'user' ? 'Фронтальная камера' : `Задняя камера${lens.active ? ' · широкий угол 0.5×' : ''}`;
-  }, () => { facingMode = previous; });
+  finally { switching = false; renderCamera(); }
 }
 function renderDebug() {
   const line = $('liveDebug'); line.hidden = !debugOn || mode === 'demo';
