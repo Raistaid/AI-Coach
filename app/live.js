@@ -631,6 +631,7 @@ function stopSession() {
   const summary = snapshot();
   const result = skill.result(metrics);
   const usesFallback = result.key === skill.metric.fallbackKey;
+  const forms = usesFallback ? skill.metric.fallbackForms : skill.metric.forms;
   const record = {
     schemaVersion: 2, source: wasDemo ? 'demo' : source, metricKey: result.key, date: new Date().toISOString(), goal: skill.goal, skill: sessionSkill,
     seconds: Math.floor(elapsedMs / 1000), metricValue: result.value || 0, metricLabel: result.label,
@@ -646,6 +647,7 @@ function stopSession() {
   const index = Number.isFinite(metrics.lessonIndex) ? metrics.lessonIndex : completed.length;
   const nextLesson = skill.lessons[index] || null;
   const done = completed.length;
+  const metricWord = forms ? word(record.metricValue, forms) : record.metricLabel; // «2 выпада», «13 секунд планки»
   const mistake = summary.mainMistake;
   const info = mistake ? skill.errors?.[mistake.tag] : null;
   const skipped = (metrics.skipped || []).length;
@@ -653,7 +655,7 @@ function stopSession() {
   const planNext = !wasDemo && index >= skill.lessons.length && !skipped ? nextInPlan(ctx.prefs.plan, sessionSkill) : null;
   const data = {
     skillId: sessionSkill, skillName: skill.name, demo: wasDemo, source: record.source, progress: progress?.text || '', seconds: record.seconds,
-    metricValue: record.metricValue, metricLabel: record.metricLabel, lessonsDone: done, lessonsTotal: skill.lessons.length, bestStreak: record.bestStreak,
+    metricValue: record.metricValue, metricLabel: record.metricLabel, metricWord, lessonsDone: done, lessonsTotal: skill.lessons.length, bestStreak: record.bestStreak,
     done: done ? `выполнено ${done} из ${skill.lessons.length}${lastLesson ? `, последний «${lastLesson.title}»` : ''}${skipped ? `, пропущено ${skipped}` : ''}${record.bestStreak ? `, лучшая серия ${record.bestStreak}` : ''}.` : 'шаги урока пока не засчитаны, это нормально для первого раза.',
     mistake: info ? `${info.label.toLowerCase()} (${mistake.count} раз).` : mistake ? `${mistake.tag} (${mistake.count} раз).` : 'явных ошибок тренер не заметил.',
     next: planNext ? `следующий навык по маршруту «${getSkill(planNext).name}».` : nextLesson ? `«${nextLesson.title}»: ${nextLesson.goal.charAt(0).toLowerCase()}${nextLesson.goal.slice(1)}.` : info ? info.advice : 'повтори урок и попробуй улучшить результат.',
@@ -661,7 +663,7 @@ function stopSession() {
   };
   text('summaryTitle', wasDemo ? 'Демо завершено' : index >= skill.lessons.length && !skipped ? 'Урок пройден целиком' : done > 0 ? 'Хорошая работа' : 'Начало положено');
   text('summarySub', `${skill.emoji} ${skill.name} · ${PERSONALITIES[ctx.prefs.personality].name} тренер`);
-  text('summaryTime', formatTime(record.seconds)); text('summaryMetric', record.metricValue); text('summaryMetricLabel', record.metricLabel); text('summaryLessons', `${done}/${skill.lessons.length}`);
+  text('summaryTime', formatTime(record.seconds)); text('summaryMetric', record.metricValue); text('summaryMetricLabel', metricWord); text('summaryLessons', `${done}/${skill.lessons.length}`);
   const notes = $('summaryNotes'); notes.replaceChildren();
   for (const [label, value] of [['Получилось', data.done], ['Главная ошибка', data.mistake], ['Следующий шаг', data.next], ['Твой прогресс', data.progress]]) { if (!value) continue; const row = el('div', 'summary-row'); row.append(el('b', null, label), el('span', null, value)); notes.append(row); }
   const note = wasDemo ? 'Это была демонстрация на нарисованном спортсмене. Показатели условные и не сохранены.'
@@ -672,7 +674,7 @@ function stopSession() {
   $('summaryLive').hidden = true; text('summaryLiveText', '');
   $('summaryRhythm').replaceChildren(); $('summaryRhythm').hidden = !data.rhythm;
   if (data.rhythm) $('summaryRhythm').append(rhythmNode(data.rhythm));
-  lastSummaryText = `Aimo · ${skill.name}: ${formatTime(record.seconds)} в движении, ${record.metricValue} ${record.metricLabel}, шагов ${done}/${skill.lessons.length}. Получилось: ${data.done} Главная ошибка: ${data.mistake} Следующий шаг: ${data.next}${data.rhythm ? ` ${rhythmText(data.rhythm.stats, data.rhythm.between)}` : ''}`;
+  lastSummaryText = `Aimo · ${skill.name}: ${formatTime(record.seconds)} в движении, ${record.metricValue} ${metricWord}, шагов ${done}/${skill.lessons.length}. Получилось: ${data.done} Главная ошибка: ${data.mistake} Следующий шаг: ${data.next}${data.rhythm ? ` ${rhythmText(data.rhythm.stats, data.rhythm.between)}` : ''}`;
   openSheet('sheetSummary');
   if (planNext) { ctx.prefs.skill = planNext; store.savePrefs(ctx.prefs); toast(`Шаг маршрута пройден. Следующий навык: ${getSkill(planNext).name}`); }
   bus.emit('live-finished', data);

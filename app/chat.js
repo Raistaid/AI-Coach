@@ -162,7 +162,7 @@ function summaryCard(data) {
   const card = el('div', 'card summary');
   card.append(el('b', 'card-title', `${data.skillName || ''} · ${formatTime(data.seconds || 0)}`), el('small', 'card-goal', data.demo ? 'Демо: симуляция, в историю не записана' : data.source === 'file' ? 'Разбор видео' : 'Эфир с камеры'));
   const stats = el('div', 'card-stats');
-  for (const [value, label] of [[String(data.metricValue ?? 0), data.metricLabel || ''], [`${data.lessonsDone ?? 0}/${data.lessonsTotal ?? 0}`, 'шагов урока']]) {
+  for (const [value, label] of [[String(data.metricValue ?? 0), data.metricWord || data.metricLabel || ''], [`${data.lessonsDone ?? 0}/${data.lessonsTotal ?? 0}`, 'шагов урока']]) {
     const cell = el('div'); cell.append(el('b', null, value), el('span', null, label)); stats.append(cell);
   }
   card.append(stats);
