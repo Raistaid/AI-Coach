@@ -63,7 +63,6 @@
       <h1 class="logo">aimo</h1>
       <p class="login-tagline">Нейро-тренер в прямом эфире</p>
       <label class="field"><span>Как тебя зовут?</span><input id="loginName" maxlength="24" placeholder="Имя" required autocomplete="given-name"></label>
-      <div class="avatar-pick" role="radiogroup" aria-label="Цвет аватара" id="loginAvatars"></div>
       <button id="loginSubmit" class="btn-primary" type="submit">Войти</button>
       <p class="login-note"><svg class="ic"><use href="#i-lock"/></svg> Профиль хранится на этом устройстве. Без пароля, сервера и отправки видео.</p>
     </form>
@@ -116,7 +115,6 @@
     <div class="profile-card">
       <span id="profileAvatar" class="avatar big"></span>
       <div class="profile-name"><input id="profileNameInput" maxlength="24" aria-label="Имя"><small id="profileSince"></small></div>
-      <div class="avatar-pick" id="profileAvatars" role="radiogroup" aria-label="Цвет аватара"></div>
     </div>
 
     <h3 class="section-title">Тренер</h3>
@@ -127,6 +125,8 @@
       </div>
       <label class="row"><span><strong>Голос тренера</strong><small>Озвучивать подсказки</small></span><input id="voiceInput" type="checkbox" class="switch"></label>
       <label class="row voice-choice"><span><strong>Голос</strong><small id="voiceHint">Голоса браузера и скачиваемые</small></span><select id="coachVoiceSelect" aria-label="Голос тренера"></select></label>
+      <label class="row stacked voice-setting"><span><strong>Громкость речи</strong> <output id="voiceVolumeValue" for="voiceVolumeInput">100%</output></span><input id="voiceVolumeInput" type="range" min="0" max="100" step="5" value="100"></label>
+      <label class="row stacked voice-setting"><span><strong>Скорость речи</strong> <output id="voiceRateValue" for="voiceRateInput">1×</output></span><input id="voiceRateInput" type="range" min="0.5" max="1.5" step="0.05" value="1"></label>
       <div class="voice-actions">
         <button id="previewCoachVoice" class="btn-ghost small" type="button">Прослушать</button>
         <button id="downloadCoachVoice" class="btn-ghost small model-download" type="button" hidden>Скачать голос · 63 МБ</button>

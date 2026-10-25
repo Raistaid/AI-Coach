@@ -9,7 +9,8 @@ export function selectedVoice(voices, key = '') {
   return russian.find(v => voiceKey(v) === key) || russian.find(v => v.default) || russian[0] || null;
 }
 export function configureUtterance(utterance, prefs, personality, voices) {
-  utterance.lang = 'ru-RU'; utterance.rate = personality.voiceRate; utterance.pitch = personality.voicePitch;
+  utterance.lang = 'ru-RU'; utterance.rate = prefs.voiceRate ?? personality.voiceRate; utterance.pitch = personality.voicePitch;
+  utterance.volume = prefs.voiceVolume ?? 1;
   const voice = selectedVoice(voices, prefs.voiceId);
   if (voice) utterance.voice = voice;
   return utterance;

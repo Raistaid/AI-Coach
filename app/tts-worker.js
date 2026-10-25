@@ -34,7 +34,7 @@ self.onmessage = async ({ data }) => {
     const feeds = {
       input: new ort.Tensor('int64', BigInt64Array.from(ids, BigInt), [1, ids.length]),
       input_lengths: new ort.Tensor('int64', BigInt64Array.from([ids.length], BigInt), [1]),
-      scales: new ort.Tensor('float32', Float32Array.from([config.inference.noise_scale, config.inference.length_scale / Math.max(.8, Math.min(1.2, rate)), config.inference.noise_w]), [3]),
+      scales: new ort.Tensor('float32', Float32Array.from([config.inference.noise_scale, config.inference.length_scale / Math.max(.5, Math.min(1.5, rate)), config.inference.noise_w]), [3]),
     };
     const result = await engine.run(feeds);
     const pcm = new Float32Array(result.output.data);

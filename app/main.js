@@ -64,17 +64,7 @@ document.querySelectorAll('.tab[data-tab]').forEach(tab => tab.addEventListener(
 }));
 
 /* ───────────── Login ───────────── */
-function renderAvatarPicker(container, selectedHue, onPick) {
-  container.replaceChildren();
-  for (const hue of store.AVATAR_HUES) {
-    const swatch = el('button', 'swatch'); swatch.type = 'button'; swatch.style.setProperty('--hue', hue);
-    swatch.setAttribute('role', 'radio'); swatch.setAttribute('aria-checked', String(hue === selectedHue)); swatch.setAttribute('aria-label', `Оттенок ${hue}`);
-    swatch.addEventListener('click', () => { onPick(hue); renderAvatarPicker(container, hue, onPick); });
-    container.append(swatch);
-  }
-}
-let loginHue = store.AVATAR_HUES[0];
-renderAvatarPicker($('loginAvatars'), loginHue, hue => { loginHue = hue; });
+const loginHue = store.AVATAR_HUES[0];
 function submitLogin(event) {
   event?.preventDefault();
   const name = $('loginName').value.trim();
@@ -221,7 +211,6 @@ $('clearHistory').addEventListener('click', () => { history = []; store.saveHist
 function renderProfile() {
   paintAvatar($('profileAvatar'), profile); $('profileNameInput').value = profile.name;
   text('profileSince', `В Aimo с ${new Date(profile.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}`);
-  renderAvatarPicker($('profileAvatars'), profile.hue, hue => { profile = { ...profile, hue }; store.saveProfile(profile); syncProfile(); });
   renderPersonalities(); applyPreferences();
 }
 function syncProfile() { paintAvatar($('tabAvatar'), profile); paintAvatar($('profileAvatar'), profile); chat.setProfile(profile); live.setProfile(profile); }
@@ -312,7 +301,7 @@ function renderVoiceOptions() {
   for (const voice of voices) { const option = el('option', null, `${voice.name}${voice.localService ? '' : ' · онлайн'}`); option.value = voiceKey(voice); system.append(option); }
   if (voices.length) select.append(system);
   select.value = localVoice(prefs.voiceId) || voices.some(v => voiceKey(v) === prefs.voiceId) ? prefs.voiceId : '';
-  text('voiceHint', 'Денис и Дмитрий звучат на устройстве после скачивания');
+  text('voiceHint', 'Ирина, Руслан, Денис и Дмитрий · скачай и прослушай, чтобы выбрать');
   renderLocalVoiceControls();
 }
 function renderLocalVoiceControls() {
@@ -330,6 +319,19 @@ function renderLocalVoiceControls() {
   text('voiceDownloadStatus', voice && !trainerAudio.supported ? 'Для скачиваемых голосов нужен браузер с локальным хранилищем и Web Audio. Выбери системный голос.' : message || (ready ? 'Голос скачан. Нажми «Прослушать голос», чтобы выбрать звучание.' : voice ? 'Один раз скачай голос. При первом запуске также загрузится модуль озвучивания.' : 'Выбранный голос озвучивает подсказки и ответы в эфире.'));
 }
 trainerAudio.onChange(() => { renderLocalVoiceControls(); renderModels(); });
+function renderSpeechSettings() {
+  $('voiceVolumeInput').value = Math.round(prefs.voiceVolume * 100);
+  $('voiceRateInput').value = prefs.voiceRate;
+  text('voiceVolumeValue', `${Math.round(prefs.voiceVolume * 100)}%`);
+  text('voiceRateValue', `${prefs.voiceRate.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}×`);
+}
+for (const [id, key, scale] of [['voiceVolumeInput', 'voiceVolume', 100], ['voiceRateInput', 'voiceRate', 1]]) {
+  $(id).addEventListener('input', () => {
+    prefs[key] = Number($(id).value) / scale;
+    store.savePrefs(prefs); renderSpeechSettings();
+  });
+}
+renderSpeechSettings();
 $('coachVoiceSelect').addEventListener('change', () => { trainerAudio.release(); prefs.voiceId = $('coachVoiceSelect').value; store.savePrefs(prefs); renderLocalVoiceControls(); trainerAudio.refresh(); });
 $('downloadCoachVoice').addEventListener('click', async () => {
   if (modelManager.busy || live.isActive()) return;

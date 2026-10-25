@@ -72,6 +72,8 @@ export function sanitizePrefs(raw) {
   if (!['contain', 'cover'].includes(prefs.fit)) prefs.fit = 'contain'; // the whole frame: what the coach analyses
   prefs.wide = prefs.wide !== false;
   prefs.voiceId = typeof prefs.voiceId === 'string' ? prefs.voiceId.slice(0, 300) : '';
+  prefs.voiceVolume = Number.isFinite(prefs.voiceVolume) ? Math.max(0, Math.min(1, prefs.voiceVolume)) : 1;
+  prefs.voiceRate = Number.isFinite(prefs.voiceRate) ? Math.max(0.5, Math.min(1.5, prefs.voiceRate)) : 1;
   if (typeof raw?.objects !== 'boolean' && typeof raw?.ball === 'boolean') prefs.objects = raw.ball;
   delete prefs.ball;
   for (const key of ['voice', 'skeleton', 'mirror', 'objects', 'sound', 'autoFar', 'liveCoach']) prefs[key] = Boolean(prefs[key]);
