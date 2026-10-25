@@ -57,7 +57,7 @@ export function greeting(name, hour = new Date().getHours()) {
 
 /* ───────────── Preferences ───────────── */
 
-const DEFAULT_PREFS = { voice: true, skeleton: true, mirror: false, ball: true, sound: true, autoFar: true, liveCoach: false, llmModel: 'default', skill: 'football', personality: 'calm', plan: [], planGoal: '', theme: 'system' };
+const DEFAULT_PREFS = { voice: true, voiceId: '', skeleton: true, mirror: false, objects: true, sound: true, autoFar: true, liveCoach: false, llmModel: 'default', skill: 'football', personality: 'calm', plan: [], planGoal: '', theme: 'system' };
 
 export function sanitizePrefs(raw) {
   const prefs = { ...DEFAULT_PREFS, ...(raw && typeof raw === 'object' ? raw : {}) };
@@ -67,7 +67,10 @@ export function sanitizePrefs(raw) {
   prefs.plan = Array.isArray(prefs.plan) ? prefs.plan.filter(id => SKILL_LIST.some(s => s.id === id)).slice(0, 3) : [];
   prefs.planGoal = typeof prefs.planGoal === 'string' ? prefs.planGoal.slice(0, 200) : '';
   if (!['system', 'light', 'dark'].includes(prefs.theme)) prefs.theme = 'system';
-  for (const key of ['voice', 'skeleton', 'mirror', 'ball', 'sound', 'autoFar', 'liveCoach']) prefs[key] = Boolean(prefs[key]);
+  prefs.voiceId = typeof prefs.voiceId === 'string' ? prefs.voiceId.slice(0, 300) : '';
+  if (typeof raw?.objects !== 'boolean' && typeof raw?.ball === 'boolean') prefs.objects = raw.ball;
+  delete prefs.ball;
+  for (const key of ['voice', 'skeleton', 'mirror', 'objects', 'sound', 'autoFar', 'liveCoach']) prefs[key] = Boolean(prefs[key]);
   return prefs;
 }
 export const loadPrefs = () => sanitizePrefs(storage.read(KEYS.prefs, {}));
