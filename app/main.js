@@ -75,12 +75,15 @@ function renderAvatarPicker(container, selectedHue, onPick) {
 }
 let loginHue = store.AVATAR_HUES[0];
 renderAvatarPicker($('loginAvatars'), loginHue, hue => { loginHue = hue; });
-$('loginForm').addEventListener('submit', (event) => {
-  event.preventDefault();
-  const name = $('loginName').value.trim(); if (!name) return;
+function submitLogin(event) {
+  event?.preventDefault();
+  const name = $('loginName').value.trim();
+  if (!name) { $('loginName').focus(); return; }
   profile = store.sanitizeProfile({ name, hue: loginHue, createdAt: new Date().toISOString() });
   store.saveProfile(profile); enterApp(); toast(`Добро пожаловать, ${profile.name}!`);
-});
+}
+$('loginForm').addEventListener('submit', submitLogin);
+$('loginSubmit').addEventListener('click', submitLogin);
 $('logoutBtn').addEventListener('click', () => {
   store.clearProfile(); profile = null; app.dataset.screen = 'login'; $('loginName').value = '';
   toast('Ты вышел. Чаты и история остались на этом устройстве.');
