@@ -9,7 +9,9 @@ import * as store from './store.js';
 import * as chat from './chat.js';
 import * as live from './live.js';
 import { createModelManager } from './model-manager.js';
-import { russianVoices, voiceKey, configureUtterance } from './speech.js';
+import { russianVoices, voiceKey } from './speech.js';
+import { LOCAL_VOICES, localVoice } from './voice-models.js';
+import { trainerAudio } from './trainer-audio.js';
 import { initViewport } from './viewport.js';
 
 store.migrateLegacyKeys();
@@ -48,7 +50,7 @@ function showScreen(name) {
   app.dataset.screen = name;
   document.querySelectorAll('.tab[data-tab]').forEach(tab => { if (tab.dataset.tab === name) tab.setAttribute('aria-current', 'page'); else tab.removeAttribute('aria-current'); });
   if (name === 'progress') renderProgress();
-  if (name === 'profile') { renderProfile(); modelManager.refresh(); }
+  if (name === 'profile') { renderProfile(); modelManager.refresh(); trainerAudio.refresh(); }
   if (name === 'catalog') renderCatalog();
   if (name !== 'chat') document.querySelector(`.screen-${name}`)?.scrollTo({ top: 0 });
   if (drawerOpen) setDrawer(false, { focus: false });
@@ -228,7 +230,7 @@ function applyPreferences() {
 for (const key of ['voice', 'skeleton', 'mirror', 'objects', 'sound', 'autoFar']) $(key + 'Input').addEventListener('change', () => {
   prefs[key] = $(key + 'Input').checked; store.savePrefs(prefs); applyPreferences();
   if (key === 'sound' && prefs.sound) live.ensureAudio();
-  if (key === 'voice' && !prefs.voice && 'speechSynthesis' in window) speechSynthesis.cancel();
+  if (key === 'voice' && !prefs.voice) trainerAudio.cancel();
   if (key === 'objects') live.resetEngine();
 });
 $('themeSelect').addEventListener('change', () => { prefs.theme = $('themeSelect').value; store.savePrefs(prefs); applyTheme(); });
@@ -249,12 +251,13 @@ function renderModels() {
     const ready = info.status === 'cached';
     button.textContent = ready ? 'Скачана' : info.status === 'loading' ? 'Загружается…' : 'Скачать';
     button.dataset.ready = String(ready);
-    button.disabled = ready || modelManager.busy || info.status === 'checking' || !supportsWebGPU() || live.isActive();
+    button.disabled = ready || modelManager.busy || trainerAudio.downloading || info.status === 'checking' || !supportsWebGPU() || live.isActive();
     button.setAttribute('aria-label', `${ready ? 'Скачана' : 'Скачать'} ${LLM_MODELS[key].label}`);
     text(`modelStatus-${key}`, !supportsWebGPU() ? 'Для скачивания и запуска нужен WebGPU' : info.message);
     const bar = $(`modelProgress-${key}`); bar.hidden = info.status !== 'loading'; bar.value = info.progress;
   }
   $('cancelModelDownload').hidden = !modelManager.downloading;
+  renderLocalVoiceControls();
 }
 document.querySelectorAll('[data-download-model]').forEach(button => button.addEventListener('click', async () => {
   const key = button.dataset.downloadModel;
@@ -280,7 +283,7 @@ async function unloadLiveCoach() {
   await modelManager.release();
   text('liveCoachStatus', 'Модель выгружена из памяти. Скачанные файлы остаются в кеше.');
 }
-window.addEventListener('pagehide', () => { liveStartRequest++; modelManager.dispose(); });
+window.addEventListener('pagehide', () => { liveStartRequest++; modelManager.dispose(); trainerAudio.dispose(); });
 window.addEventListener('pageshow', event => { if (event.persisted) { modelManager = makeModelManager(); renderModels(); } });
 if (!supportsWebGPU()) { $('liveCoachInput').disabled = true; text('liveCoachHint', 'Нужен WebGPU. В этом браузере его нет: подсказки по правилам работают, живой тренер недоступен.'); prefs.liveCoach = false; }
 
@@ -288,27 +291,49 @@ if (!supportsWebGPU()) { $('liveCoachInput').disabled = true; text('liveCoachHin
 function renderVoiceOptions() {
   const select = $('coachVoiceSelect'); select.replaceChildren(el('option', null, 'Автоматически · русский'));
   select.options[0].value = '';
-  const supported = Boolean(window.speechSynthesis && window.SpeechSynthesisUtterance);
+  const local = el('optgroup'); local.label = 'Скачиваемые голоса · на устройстве';
+  for (const voice of LOCAL_VOICES) { const option = el('option', null, `${voice.name} · ${voice.description}`); option.value = voice.id; local.append(option); }
+  select.append(local);
+  const system = el('optgroup'); system.label = 'Голоса браузера и системы';
   const voices = russianVoices(window.speechSynthesis?.getVoices() || []);
-  for (const voice of voices) { const option = el('option', null, `${voice.name}${voice.localService ? '' : ' · онлайн'}`); option.value = voiceKey(voice); select.append(option); }
-  select.value = voices.some(v => voiceKey(v) === prefs.voiceId) ? prefs.voiceId : '';
-  select.disabled = !supported; $('previewCoachVoice').disabled = !supported;
-  text('voiceHint', !supported ? 'Озвучивание недоступно в этом браузере' : voices.length ? 'Русские голоса браузера и системы; выбранный голос сохраняется на устройстве' : 'Русские голоса пока не найдены. Используется голос системы; можно установить русский голос в настройках устройства.');
+  for (const voice of voices) { const option = el('option', null, `${voice.name}${voice.localService ? '' : ' · онлайн'}`); option.value = voiceKey(voice); system.append(option); }
+  if (voices.length) select.append(system);
+  select.value = localVoice(prefs.voiceId) || voices.some(v => voiceKey(v) === prefs.voiceId) ? prefs.voiceId : '';
+  text('voiceHint', 'Денис и Дмитрий озвучивают текст на устройстве после скачивания. Можно также выбрать русский голос системы.');
+  renderLocalVoiceControls();
 }
-$('coachVoiceSelect').addEventListener('change', () => { prefs.voiceId = $('coachVoiceSelect').value; store.savePrefs(prefs); });
+function renderLocalVoiceControls() {
+  const voice = localVoice(prefs.voiceId), state = voice && trainerAudio.states[voice.id];
+  $('coachVoiceSelect').disabled = trainerAudio.downloading;
+  const button = $('downloadCoachVoice'), ready = state?.status === 'cached';
+  button.hidden = !voice;
+  button.textContent = ready ? 'Голос скачан' : state?.status === 'downloading' ? 'Скачивается…' : 'Скачать голос · 63 МБ';
+  button.dataset.ready = String(ready);
+  button.disabled = ready || trainerAudio.downloading || modelManager.busy || live.isActive() || !trainerAudio.supported || state?.status === 'unknown';
+  $('previewCoachVoice').disabled = voice ? !ready || trainerAudio.downloading : !window.speechSynthesis;
+  $('cancelVoiceDownload').hidden = !trainerAudio.downloading;
+  const bar = $('voiceDownloadProgress'); bar.hidden = !trainerAudio.downloading; bar.value = state?.progress || 0;
+  text('voiceDownloadStatus', voice && !trainerAudio.supported ? 'Для скачиваемых голосов нужен браузер с локальным хранилищем и Web Audio. Выбери системный голос.' : trainerAudio.status || (voice ? 'Один раз скачай голос. При первом запуске также загрузится модуль озвучивания.' : 'Выбранный голос озвучивает подсказки и ответы в эфире.'));
+}
+trainerAudio.onChange(() => { renderLocalVoiceControls(); renderModels(); });
+$('coachVoiceSelect').addEventListener('change', () => { trainerAudio.release(); prefs.voiceId = $('coachVoiceSelect').value; store.savePrefs(prefs); renderLocalVoiceControls(); trainerAudio.refresh(); });
+$('downloadCoachVoice').addEventListener('click', async () => {
+  if (modelManager.busy || live.isActive()) return;
+  try { await trainerAudio.downloadVoice(prefs.voiceId); } catch (error) { if (error.name !== 'AbortError') toast(error.message); }
+});
+$('cancelVoiceDownload').addEventListener('click', () => trainerAudio.cancelDownload());
 $('previewCoachVoice').addEventListener('click', () => {
-  if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
-  speechSynthesis.cancel();
-  const utterance = configureUtterance(new SpeechSynthesisUtterance('Готов к тренировке. Я буду подсказывать по ходу эфира.'), prefs, PERSONALITIES[prefs.personality], speechSynthesis.getVoices());
-  speechSynthesis.speak(utterance);
+  trainerAudio.unlock();
+  trainerAudio.speak('Привет! Давай потренируемся вместе. Не спеши, держи равновесие. У тебя всё получится.', prefs, PERSONALITIES[prefs.personality]);
 });
 window.speechSynthesis?.addEventListener('voiceschanged', renderVoiceOptions);
-renderVoiceOptions(); renderModels();
+renderVoiceOptions(); renderModels(); trainerAudio.refresh();
 
 /* ───────────── Live wiring ───────────── */
 async function startSession(options) {
   live.unlockSpeech(); live.ensureAudio();
   const request = ++liveStartRequest; closeSheet(); setDrawer(false);
+  await trainerAudio.cancelDownload(); if (request !== liveStartRequest) return;
   if (modelManager.downloading) { await modelManager.cancelDownload(); toast('Скачивание остановлено: анализ движений важнее.'); }
   await modelManager.release(); if (request !== liveStartRequest) return;
   live.startLive(options);

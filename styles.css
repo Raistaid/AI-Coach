@@ -220,7 +220,10 @@ select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; b
 .model-choice label { display: flex; gap: 8px; align-items: center; }
 .voice-choice { flex-wrap: wrap; gap: 10px; }
 .voice-choice select { max-width: 100%; min-width: 0; width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
-.voice-preview { margin: 8px 14px 4px; }
+.voice-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 14px 4px; }
+.voice-actions button:disabled { opacity: .45; cursor: default; }
+.voice-progress { display: block; width: calc(100% - 28px); margin: 8px 14px; accent-color: var(--accent); }
+.voice-progress[hidden] { display: none; }
 .model-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--line2); }
 .model-card:last-child { border-bottom: 0; }
 .model-card label { min-width: 0; }

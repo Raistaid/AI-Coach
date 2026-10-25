@@ -7,7 +7,8 @@ import { buildSummary } from '../coach-llm.js';
 import { nextInPlan } from '../coach-planner.js';
 import { $, text, el, toast, haptic, bus, formatTime, openSheet, closeSheet, paintAvatar } from './ui.js';
 import * as store from './store.js';
-import { configureUtterance, createVoiceQuestion } from './speech.js';
+import { createVoiceQuestion } from './speech.js';
+import { trainerAudio } from './trainer-audio.js';
 import { cleanQuestion, answerTrainingQuestion, buildQuestionMessages, validateQuestionReply } from '../coach-questions.js';
 
 const cueLabels = {
@@ -52,7 +53,7 @@ export function initLive({ prefs, profile, ensureLiveCoach, getLiveCoach, onHist
   $('livePause').addEventListener('click', togglePause);
   $('liveSkip').addEventListener('click', () => { if (mode === 'demo' || !engine || state !== 'live') return; engine.skip(); toast('Шаг пропущен. Он отмечен как невыполненный.'); });
   $('liveFlip').addEventListener('click', flipCamera);
-  $('liveVoice').addEventListener('click', () => { ctx.prefs.voice = !ctx.prefs.voice; store.savePrefs(ctx.prefs); applyPrefs(); if (!ctx.prefs.voice && 'speechSynthesis' in window) speechSynthesis.cancel(); bus.emit('prefs-changed'); });
+  $('liveVoice').addEventListener('click', () => { ctx.prefs.voice = !ctx.prefs.voice; store.savePrefs(ctx.prefs); applyPrefs(); if (!ctx.prefs.voice) trainerAudio.cancel(); bus.emit('prefs-changed'); });
   $('liveSkeleton').addEventListener('click', () => { ctx.prefs.skeleton = !ctx.prefs.skeleton; store.savePrefs(ctx.prefs); applyPrefs(); bus.emit('prefs-changed'); });
   $('liveFar').addEventListener('click', () => { farManual = !farActive(); renderFar(); toast(farManual ? 'Крупный режим: последняя фраза во весь кадр' : 'Обычная лента комментариев'); });
   $('liveRetry').addEventListener('click', () => startLive({ skillId: sessionSkill, mode: source === 'file' && pendingFile ? 'file' : 'camera', file: pendingFile }));
@@ -81,7 +82,7 @@ export function initLive({ prefs, profile, ensureLiveCoach, getLiveCoach, onHist
   $('liveQuestionMic').addEventListener('click', () => {
     if (state !== 'live' || questionBusy) return;
     if (voiceQuestion.listening) { voiceQuestion.abort(); text('liveQuestionStatus', 'Микрофон выключен.'); return; }
-    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    trainerAudio.cancel();
     voiceQuestion.start();
   });
   $('liveQuestionForm').addEventListener('submit', event => { event.preventDefault(); askQuestion($('liveQuestionInput').value); });
@@ -213,7 +214,7 @@ function cancelRun() {
   closeQuestion();
   generation++; cancelAnimationFrame(raf); raf = 0; releaseMedia();
   overlay?.getContext('2d').clearRect(0, 0, overlay.width, overlay.height);
-  if ('speechSynthesis' in window) speechSynthesis.cancel();
+  trainerAudio.release();
   audioCtx?.suspend().catch(() => {});
   $('stageFlash').removeAttribute('data-kind');
 }
@@ -243,7 +244,7 @@ async function togglePause() {
     closeQuestion();
     setState('paused'); cancelAnimationFrame(raf); video.pause();
     stream?.getVideoTracks().forEach(t => { t.enabled = false; });
-    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    trainerAudio.release();
     text('stageHint', 'Пауза · продолжи, когда будешь готов');
   } else if (state === 'paused') {
     stream?.getVideoTracks().forEach(t => { t.enabled = true; });
@@ -333,14 +334,13 @@ function react(emoji) {
   $('liveReactions').append(node); node.addEventListener('animationend', () => node.remove());
 }
 function speak(message, kind = 'tip', force = false) {
-  if (!ctx.prefs.voice || !('speechSynthesis' in window) || state !== 'live' || voiceQuestion?.listening || questionBusy) return;
+  if (!ctx.prefs.voice || state !== 'live' || voiceQuestion?.listening || questionBusy) return;
   const urgent = kind !== 'tip'; const now = performance.now();
-  if (!force && !urgent && (now - lastSpoken < 5000 || speechSynthesis.speaking)) return;
+  if (!force && !urgent && (now - lastSpoken < 5000 || trainerAudio.speaking)) return;
   if (!force && urgent && now - lastSpoken < 1200) return;
-  lastSpoken = now; if (urgent || force) speechSynthesis.cancel();
+  lastSpoken = now; if (urgent || force) trainerAudio.cancel();
   const p = PERSONALITIES[ctx.prefs.personality];
-  const utterance = configureUtterance(new SpeechSynthesisUtterance(message), ctx.prefs, p, speechSynthesis.getVoices());
-  speechSynthesis.speak(utterance);
+  trainerAudio.speak(message, ctx.prefs, p, { timeoutMs: kind === 'warning' ? 3000 : 6000 });
 }
 function keepAwake(run) {
   if (!navigator.wakeLock || mode === 'demo' || (wakeLock && !wakeLock.released)) return;
@@ -348,6 +348,7 @@ function keepAwake(run) {
 }
 let speechUnlocked = false;
 export function unlockSpeech() {
+  trainerAudio.unlock();
   if (!('speechSynthesis' in window) || speechUnlocked) return;
   speechUnlocked = true;
   try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; u.lang = 'ru-RU'; speechSynthesis.speak(u); speechSynthesis.getVoices(); } catch { /* optional */ }

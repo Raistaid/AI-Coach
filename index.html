@@ -118,7 +118,13 @@
     <h3 class="section-title">Эфир</h3>
     <label class="row"><span><strong>Голос тренера</strong><small>Озвучивать подсказки</small></span><input id="voiceInput" type="checkbox" class="switch"></label>
     <label class="row voice-choice"><span><strong>Выбрать голос</strong><small id="voiceHint">Голоса загружаются из браузера и системы</small></span><select id="coachVoiceSelect" aria-label="Голос тренера"></select></label>
-    <button id="previewCoachVoice" class="btn-ghost small voice-preview" type="button">Прослушать голос</button>
+    <div class="voice-actions">
+      <button id="downloadCoachVoice" class="btn-ghost small model-download" type="button" hidden>Скачать голос · 63 МБ</button>
+      <button id="previewCoachVoice" class="btn-ghost small" type="button">Прослушать голос</button>
+      <button id="cancelVoiceDownload" class="btn-ghost small" type="button" hidden>Отменить скачивание</button>
+    </div>
+    <progress id="voiceDownloadProgress" class="voice-progress" max="1" value="0" aria-label="Скачивание голоса" hidden></progress>
+    <p id="voiceDownloadStatus" class="model-note" role="status"></p>
     <label class="row"><span><strong>Звуковые сигналы</strong><small>Касание, шаг урока, ошибка</small></span><input id="soundInput" type="checkbox" class="switch" checked></label>
     <label class="row"><span><strong>Крупный режим на расстоянии</strong><small>Последняя фраза во весь кадр, когда ты далеко</small></span><input id="autoFarInput" type="checkbox" class="switch" checked></label>
     <label class="row"><span><strong>Разметка тела</strong><small>Точки и линии поверх видео</small></span><input id="skeletonInput" type="checkbox" class="switch" checked></label>
