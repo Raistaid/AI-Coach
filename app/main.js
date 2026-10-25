@@ -224,7 +224,7 @@ function renderPersonalities() {
   }
 }
 function applyPreferences() {
-  for (const key of ['voice', 'skeleton', 'mirror', 'objects', 'sound', 'autoFar', 'liveCoach']) if ($(key + 'Input')) $(key + 'Input').checked = prefs[key];
+  for (const key of ['voice', 'skeleton', 'mirror', 'objects', 'sound', 'autoFar']) if ($(key + 'Input')) $(key + 'Input').checked = prefs[key];
   document.querySelectorAll('input[name=llmModel]').forEach(radio => { radio.checked = radio.value === prefs.llmModel; });
   live.applyPrefs(); applyTheme();
 }
@@ -235,10 +235,6 @@ for (const key of ['voice', 'skeleton', 'mirror', 'objects', 'sound', 'autoFar']
   if (key === 'objects') live.resetEngine();
 });
 $('themeSelect').addEventListener('change', () => { prefs.theme = $('themeSelect').value; store.savePrefs(prefs); applyTheme(); });
-$('liveCoachInput').addEventListener('change', () => {
-  prefs.liveCoach = $('liveCoachInput').checked; store.savePrefs(prefs); applyPreferences();
-  if (prefs.liveCoach) ensureLiveCoach().catch(() => {}); else unloadLiveCoach();
-});
 document.querySelectorAll('input[name=llmModel]').forEach(radio => radio.addEventListener('change', async () => {
   prefs.llmModel = radio.value; store.savePrefs(prefs);
   await unloadLiveCoach(); if (prefs.liveCoach) ensureLiveCoach().catch(() => {});
@@ -250,6 +246,7 @@ function renderModels() {
   for (const [key, info] of Object.entries(modelManager.states)) {
     const button = document.querySelector(`[data-download-model="${key}"]`);
     const ready = info.status === 'cached';
+    if (ready && !prefs.liveCoach) { prefs.liveCoach = true; store.savePrefs(prefs); }
     button.textContent = ready ? 'Скачана' : info.status === 'loading' ? 'Загружается…' : 'Скачать';
     button.dataset.ready = String(ready);
     button.disabled = ready || modelManager.busy || trainerAudio.downloading || info.status === 'checking' || !supportsWebGPU() || live.isActive();
@@ -263,7 +260,7 @@ function renderModels() {
 document.querySelectorAll('[data-download-model]').forEach(button => button.addEventListener('click', async () => {
   const key = button.dataset.downloadModel;
   text('liveCoachStatus', `Скачиваем ${LLM_MODELS[key].label}. Можно отменить загрузку.`);
-  try { await modelManager.download(key); text('liveCoachStatus', `${LLM_MODELS[key].label} скачана. Её можно выбрать и включить живого тренера.`); }
+  try { await modelManager.download(key); text('liveCoachStatus', `${LLM_MODELS[key].label} скачана. Она будет использоваться в эфире и чате.`); }
   catch (error) { if (error.name !== 'AbortError') { text('liveCoachStatus', error.message); toast(error.message); } }
 }));
 $('cancelModelDownload').addEventListener('click', async () => { await modelManager.cancelDownload(); text('liveCoachStatus', 'Скачивание отменено.'); modelManager.refresh(); });
@@ -286,7 +283,7 @@ async function unloadLiveCoach() {
 }
 window.addEventListener('pagehide', () => { liveStartRequest++; modelManager.dispose(); trainerAudio.dispose(); });
 window.addEventListener('pageshow', event => { if (event.persisted) { modelManager = makeModelManager(); renderModels(); } });
-if (!supportsWebGPU()) { $('liveCoachInput').disabled = true; text('liveCoachHint', 'Нужен WebGPU. В этом браузере его нет: подсказки по правилам работают, живой тренер недоступен.'); prefs.liveCoach = false; }
+if (!supportsWebGPU()) text('liveCoachStatus', 'Для локальной модели нужен WebGPU. Подсказки по правилам работают без неё.');
 
 /* ───────────── Trainer voice ───────────── */
 function renderVoiceOptions() {
