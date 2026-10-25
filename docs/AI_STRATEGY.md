@@ -190,3 +190,19 @@ docs/TEST_PLAN.md как «Не проверено».
   ввод с клавиатуры, карточка маршрута, бейджи в каталоге, сброс, сохранение в
   localStorage, демо и итог после этого; ошибок консоли нет. Ответ локальной модели
   на устройстве не проверялся (P03).
+
+### 25 октября: MCP и Context7
+
+- В репозиторий добавлен `.mcp.json` с сервером Context7 по HTTP
+  (`https://mcp.context7.com/mcp`); при первом открытии проекта Claude Code просит
+  подтвердить проектный сервер. Ключ API не обязателен, в репозитории его нет.
+- Сервер проверен запросами по протоколу MCP: версия Context7 4.4.3, инструменты
+  `resolve-library-id` и `query-docs`. Найденные идентификаторы: MediaPipe
+  `/google-ai-edge/mediapipe`, WebLLM `/mlc-ai/web-llm`.
+- Сверка через `query-docs`: схема Web Worker в WebLLM (WebWorkerMLCEngineHandler
+  в воркере, `CreateWebWorkerMLCEngine(worker, modelId, { initProgressCallback })`,
+  `engine.unload()`) совпадает с `llm-worker.js` и `coach-llm.js`. У MediaPipe
+  подтверждены `createFromOptions`, `detectForVideo(frame, timestamp)` и режим
+  `runningMode: 'VIDEO'`, который используется в `coach-engine.js`.
+- Правило для агентов зафиксировано в AGENTS.md: API сверять через `query-docs`
+  до использования и записывать выдержку с датой сюда.

@@ -88,4 +88,6 @@ node scripts/build.mjs                     # копирует файлы при�
 - `app.js`, `scripts/build.mjs` — камера, сессия, интеграция, публикация (root).
 - `docs/PROMPT.md` — полный промпт проекта; `docs/demo/` — запасное видео для защиты (хранится локально на демо-телефоне).
 
+Для агентов Claude Code в репозитории есть `.mcp.json` с MCP-сервером Context7: актуальная документация MediaPipe и WebLLM запрашивается через него, а не из памяти модели. Подробности в `AGENTS.md`.
+
 Документация API: [MediaPipe Pose Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker/web_js), [MediaPipe Object Detector](https://ai.google.dev/edge/mediapipe/solutions/vision/object_detector/web_js), [WebLLM](https://github.com/mlc-ai/web-llm).

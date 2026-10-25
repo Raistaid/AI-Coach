@@ -27,6 +27,14 @@
 
 Общие контракты (формат результата анализа, события уроков, сводка для LLM) root сообщает агентам до реализации.
 
+## MCP и Context7
+- В корне лежит `.mcp.json` с сервером Context7 (`https://mcp.context7.com/mcp`, транспорт HTTP). Claude Code подхватывает его при открытии проекта и спрашивает разрешение на проектные MCP-серверы один раз.
+- Инструменты: `resolve-library-id` (найти библиотеку: `libraryName`, `query`) и `query-docs` (получить документацию: `libraryId`, `query`, `language`).
+- Проверенные идентификаторы: MediaPipe `/google-ai-edge/mediapipe` (сайт документации `/websites/developers_google_edge_mediapipe`), WebLLM `/mlc-ai/web-llm`.
+- Правило: перед использованием любого API MediaPipe или WebLLM агент вызывает `query-docs` с конкретным вопросом и опирается на ответ, а не на память. Выдержку с датой записывать в docs/AI_STRATEGY.md.
+- Ключ API не обязателен; для больших лимитов добавить заголовок `Authorization: Bearer <ключ>` в свою пользовательскую конфигурацию (`claude mcp add --transport http context7 https://mcp.context7.com/mcp --header "Authorization: Bearer <ключ>"`), в репозиторий ключ не класть.
+- Чтобы инструменты Context7 не спрашивали подтверждение, в `.claude/settings.json` можно разрешить `mcp__context7__resolve-library-id` и `mcp__context7__query-docs`.
+
 ## Правила
 - До изменений прочитать релевантные файлы; сохранять чужую работу.
 - Не запускать сборки и публикацию параллельно. Публикацией Sites занимается только root.
