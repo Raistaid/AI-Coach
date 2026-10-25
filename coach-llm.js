@@ -96,7 +96,7 @@ export function validateReply(reply, summary, mode = 'live') {
   const letters = text.match(/\p{L}/gu) || [];
   const cyrillic = text.match(/\p{Script=Cyrillic}/gu) || [];
   if (letters.length < 3 || cyrillic.length / letters.length < 0.8) return { ok: false, reason: 'not-russian', text };
-  if (/[\u{1F300}-\u{1FAFF}]/u.test(text)) return { ok: false, reason: 'emoji', text };
+  if (/\p{Extended_Pictographic}/u.test(text)) return { ok: false, reason: 'emoji', text };
   const allowed = allowedNumbers(summary);
   const numbers = (text.match(/\d+(?:[.,]\d+)?/g) || []).map(v => Number(v.replace(',', '.')));
   const invented = numbers.find(v => !allowed.has(v));
@@ -150,6 +150,18 @@ export async function createLocalCoach({ modelId = LLM_MODELS.default.id, onStat
         return checked.ok ? checked.text : null;
       } catch (error) {
         console.warn('AI-Coach local LLM:', error);
+        return null;
+      } finally { busy = false; }
+    },
+    /** Free-form chat for the skill planner. Returns raw text; the caller validates it. */
+    async chat(messages, { maxTokens = 200, temperature = 0.4 } = {}) {
+      if (closed || busy) return null;
+      busy = true;
+      try {
+        const reply = await engine.chat.completions.create({ messages, temperature, top_p: 0.9, max_tokens: maxTokens });
+        return reply?.choices?.[0]?.message?.content ?? '';
+      } catch (error) {
+        console.warn('AI-Coach local LLM chat:', error);
         return null;
       } finally { busy = false; }
     },

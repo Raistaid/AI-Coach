@@ -1,6 +1,7 @@
 import { createCoachEngine, observePose, trackBall, createSession, stepSession, describeLesson, createPoseState, createBallState, mainMistake, farModeDecision, POSE_CONNECTIONS } from './coach-engine.js';
 import { SKILL_LIST, getSkill, PERSONALITIES, personalityId } from './skills/index.js';
 import { createLocalCoach, buildSummary, supportsWebGPU, LLM_MODELS } from './coach-llm.js';
+import { keywordPlan, buildPlannerMessages, parsePlan, planReplyText, nextInPlan, pluralize } from './coach-planner.js';
 
 const $ = id => document.getElementById(id);
 const app = $('app');
@@ -74,6 +75,9 @@ const prefs = { voice: true, skeleton: true, mirror: false, ball: true, sound: t
 if (!getSkill(prefs.skill) || getSkill(prefs.skill).id !== prefs.skill) prefs.skill = 'football';
 prefs.personality = personalityId(prefs.personality);
 if (!LLM_MODELS[prefs.llmModel]) prefs.llmModel = 'default';
+prefs.plan = Array.isArray(prefs.plan) ? prefs.plan.filter(id => SKILL_LIST.some(k => k.id === id)).slice(0, 3) : [];
+prefs.planGoal = typeof prefs.planGoal === 'string' ? prefs.planGoal.slice(0, 200) : '';
+const plannerHistory = [];
 let history = storage.read('ai-coach:sessions', []);
 if (!Array.isArray(history)) history = [];
 history = history.filter(s => s && typeof s.seconds === 'number' && SKILL_LIST.some(k => k.id === s.skill)).slice(0, 8);
@@ -132,11 +136,13 @@ function renderCatalog() {
     const emoji = document.createElement('span'); emoji.className = 'skill-emoji'; emoji.textContent = skill.emoji;
     const level = document.createElement('span'); level.className = 'skill-level'; level.textContent = skill.level;
     top.append(emoji, level);
+    const planIndex = prefs.plan.indexOf(skill.id);
+    if (planIndex !== -1) { const badge = document.createElement('span'); badge.className = 'skill-plan'; badge.textContent = `Маршрут · ${planIndex + 1}`; top.append(badge); }
     const body = document.createElement('div'); body.className = 'skill-body';
     const h = document.createElement('h3'); h.textContent = skill.name;
     const tagline = document.createElement('p'); tagline.className = 'skill-tagline'; tagline.textContent = skill.tagline;
     const meta = document.createElement('div'); meta.className = 'skill-meta';
-    for (const item of [`${skill.lessons.length} шагов`, `${skill.minutes} мин`, skill.needsBall ? 'нужен мяч' : 'без инвентаря']) { const s = document.createElement('span'); s.textContent = item; meta.append(s); }
+    for (const item of [pluralize(skill.lessons.length, ['шаг', 'шага', 'шагов']), `${skill.minutes} мин`, skill.needsBall ? 'нужен мяч' : 'без инвентаря']) { const s = document.createElement('span'); s.textContent = item; meta.append(s); }
     body.append(h, tagline, meta);
     const check = document.createElement('span'); check.className = 'skill-check'; check.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>';
     card.append(top, body, check);
@@ -161,7 +167,7 @@ function updateSkill() {
   $('goalInput').value = skill.goal;
   text('sessionGoal', skill.goal);
   text('chosenEmoji', skill.emoji); text('chosenName', skill.name);
-  text('chosenMeta', `${skill.level} · ${skill.lessons.length} шагов · ${skill.minutes} мин`);
+  text('chosenMeta', `${skill.level} · ${pluralize(skill.lessons.length, ['шаг', 'шага', 'шагов'])} · ${skill.minutes} мин`);
   text('skillDescription', skill.description); text('cameraHint', skill.camera);
   text('movementLabel', skill.metric.label); text('secondLabel', skill.id === 'football' ? 'Лучшая серия' : 'Подсказки тренера');
   text('metricNote', skill.needsBall ? 'Касания считаются только когда камера видит мяч.' : 'Счёт по позе, распознанной на устройстве.');
@@ -456,12 +462,14 @@ function stopSession(showSummary = true) {
   const mistake = summary.mainMistake;
   row('Главная ошибка', mistake && mistakeAdvice[mistake.tag] ? `${mistakeAdvice[mistake.tag][0]} (замечено ${mistake.count} раз).` : mistake ? `${cueLabels[mistake.tag] || mistake.tag} (замечено ${mistake.count} раз).` : 'Явных ошибок тренер не заметил.');
   const nextLesson = skill.lessons[done];
-  row('Следующий шаг', nextLesson ? `${nextLesson.title}: ${nextLesson.goal.toLowerCase()}.` : mistake && mistakeAdvice[mistake.tag] ? mistakeAdvice[mistake.tag][1] : 'Повтори урок и попробуй увеличить серию.');
+  const planNext = !wasDemo && done >= skill.lessons.length ? nextInPlan(prefs.plan, sessionSkill) : null;
+  row('Следующий шаг', planNext ? `Следующий навык по маршруту: «${getSkill(planNext).name}».` : nextLesson ? `${nextLesson.title}: ${nextLesson.goal.toLowerCase()}.` : mistake && mistakeAdvice[mistake.tag] ? mistakeAdvice[mistake.tag][1] : 'Повтори урок и попробуй увеличить серию.');
   const note = document.createElement('p'); note.textContent = wasDemo ? 'Это была демонстрация на нарисованном спортсмене. Её показатели условные и не сохранены.' : skill.needsBall && !metrics.ballEverSeen ? 'Мяч не был виден камере, поэтому касания не считались: только подъёмы стопы по позе.' : 'Сохранён итог без видео. Все наблюдения сделаны моделями на твоём устройстве.';
   $('summaryNotes').append(note);
   $('summaryLive').hidden = true; text('summaryLiveText', '');
   $('summaryDialog').querySelector('.summary-private').textContent = wasDemo ? 'Демо не сохраняется в историю.' : 'Сохранён только итог. Видео не записывалось.';
   $('summaryDialog').showModal();
+  if (planNext) { prefs.skill = planNext; applyPreferences(); updateSkill(); renderPlan(); toast(`Шаг маршрута пройден. Следующий навык: ${getSkill(planNext).name}`); }
   if (!wasDemo && liveCoach && record.seconds > 20) {
     const run = generation;
     pendingFinal = liveCoach.generate(buildSummary(summary), 'final').then(textValue => { if (textValue && run === generation) { text('summaryLiveText', textValue); $('summaryLive').hidden = false; } });
@@ -621,7 +629,64 @@ function maybeAskLiveCoach() {
   });
 }
 
+/* ───────────── Skill planner chat ───────────── */
+function addChat(role, message, meta = '') {
+  const item = document.createElement('div'); item.className = `chat-item ${role}`;
+  const p = document.createElement('p'); p.textContent = message; item.append(p);
+  if (meta) { const small = document.createElement('small'); small.textContent = meta; item.append(small); }
+  $('plannerLog').append(item); $('plannerLog').hidden = false;
+  while ($('plannerLog').children.length > 12) $('plannerLog').firstElementChild.remove();
+  item.scrollIntoView({ block: 'nearest' });
+}
+function renderPlan() {
+  const picked = prefs.plan.map(id => SKILL_LIST.find(k => k.id === id)).filter(Boolean);
+  $('planCard').hidden = picked.length === 0;
+  if (picked.length) {
+    text('planGoal', prefs.planGoal ? `Цель: ${prefs.planGoal}` : 'Твой маршрут');
+    const list = $('planSteps'); list.replaceChildren();
+    picked.forEach(skill => {
+      const li = document.createElement('li'); li.textContent = `${skill.emoji} ${skill.name} · ${pluralize(skill.lessons.length, ['шаг', 'шага', 'шагов'])} · ${skill.minutes} мин`;
+      if (skill.id === prefs.skill) li.className = 'is-current';
+      list.append(li);
+    });
+  }
+  renderCatalog();
+}
+async function askPlanner(message) {
+  const query = String(message || '').trim();
+  if (!query || $('plannerSend').disabled) return;
+  addChat('user', query);
+  $('plannerInput').value = ''; $('plannerSend').disabled = true;
+  let result = null;
+  if (prefs.liveCoach) {
+    text('plannerStatus', liveCoach ? 'Живой тренер думает…' : 'Загружаем живого тренера, прогресс виден в настройках…');
+    try {
+      const coach = await ensureLiveCoach();
+      const raw = await coach.chat(buildPlannerMessages(query, SKILL_LIST, plannerHistory), { maxTokens: 220 });
+      const parsed = parsePlan(raw, SKILL_LIST);
+      if (parsed.ok) result = parsed; else console.warn('AI-Coach planner: LLM reply rejected,', parsed.reason);
+    } catch (error) { console.warn('AI-Coach planner: LLM unavailable', error?.message); }
+  }
+  const viaLlm = Boolean(result);
+  if (!result) result = keywordPlan(query, SKILL_LIST);
+  const reply = result.reply || planReplyText(result.plan, SKILL_LIST);
+  plannerHistory.push({ role: 'user', content: query }, { role: 'assistant', content: reply });
+  addChat('coach', reply, viaLlm ? 'живой тренер · маршрут проверен по каталогу' : 'подбор по ключевым словам');
+  if (result.plan.length) { prefs.plan = result.plan; prefs.planGoal = query; prefs.skill = result.plan[0]; applyPreferences(); updateSkill(); }
+  renderPlan();
+  text('plannerStatus', viaLlm ? 'Ответ живого тренера проверен кодом: только навыки из каталога, без выдуманных чисел.' : prefs.liveCoach ? 'Живой тренер не дал проверяемый ответ, маршрут собран по ключевым словам.' : 'Подбор по ключевым словам. Включи «Живой тренер» в настройках, чтобы отвечала локальная модель.');
+  $('plannerSend').disabled = false;
+}
+
 /* ───────────── Events ───────────── */
+$('plannerForm').addEventListener('submit', event => { event.preventDefault(); askPlanner($('plannerInput').value); });
+document.querySelectorAll('.planner-chip').forEach(chip => chip.addEventListener('click', () => askPlanner(chip.textContent)));
+$('planStart').addEventListener('click', () => {
+  if (!prefs.plan.length) return;
+  prefs.skill = prefs.plan[0]; applyPreferences(); updateSkill(); renderPlan();
+  $('training').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+$('planClear').addEventListener('click', () => { prefs.plan = []; prefs.planGoal = ''; applyPreferences(); renderPlan(); toast('Маршрут сброшен'); });
 $('startCamera').addEventListener('click', () => { unlockSpeech(); ensureAudio(); startCamera(); });
 $('startDemo').addEventListener('click', () => { unlockSpeech(); ensureAudio(); startDemo(); });
 $('stopSession').addEventListener('click', () => stopSession());
@@ -686,4 +751,4 @@ window.addEventListener('pagehide', () => {
 });
 window.addEventListener('pageshow', event => { if (event.persisted) { setState('ready'); text('modelStatus', 'AI подключится при старте'); } });
 if (!supportsWebGPU()) { $('liveCoachInput').disabled = true; text('liveCoachHint', 'Нужен WebGPU. В этом браузере его нет: подсказки по правилам работают, живой тренер недоступен.'); prefs.liveCoach = false; }
-applyPreferences(); renderCatalog(); renderPersonalities(); updateSkill(); renderHistory(); setState('ready');
+applyPreferences(); renderPlan(); renderPersonalities(); updateSkill(); renderHistory(); setState('ready');

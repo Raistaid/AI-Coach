@@ -114,3 +114,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .stage-flash[data-kind=tip]{box-shadow:inset 0 0 0 5px #e7c56a;animation:stage-flash .7s ease-out}
 @keyframes stage-flash{from{opacity:1}to{opacity:0}}
 @media(prefers-reduced-motion:reduce){.stage-flash{animation:none!important}}
+/* Skill planner chat: a route through the catalog, never outside it. */
+.planner{margin:0 0 16px;padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--panel)}
+.planner-head h3{font-size:15px;font-weight:600}.planner-head p{margin-top:4px;color:var(--muted);font-size:12px;line-height:1.55}
+.planner-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.planner-chip{padding:7px 11px;border:1px solid var(--line);border-radius:999px;background:var(--soft);color:#4c6855;font-size:11px;text-align:left}.planner-chip:hover{background:#dfe9dc}
+.chat-log{display:flex;flex-direction:column;gap:8px;margin-top:12px;max-height:260px;overflow:auto}.chat-item{max-width:88%;padding:9px 12px;border-radius:12px;font-size:12px;line-height:1.55}.chat-item.user{align-self:flex-end;background:#2e4135;color:#f1f6ef;border-bottom-right-radius:4px}.chat-item.coach{align-self:flex-start;background:var(--soft);color:var(--text);border-bottom-left-radius:4px}.chat-item small{display:block;margin-top:4px;font-size:10px;color:var(--muted)}
+.planner-form{display:flex;gap:8px;margin-top:12px}.planner-form input{flex:1;min-width:0;padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:#fafcf7;color:var(--text);font:13px var(--font)}.planner-form input:focus{outline:2px solid var(--accent);outline-offset:1px}.planner-send{width:auto;min-height:auto;padding:10px 14px;white-space:nowrap}.planner-send:disabled{opacity:.6}
+.planner-status{margin-top:8px;font-size:11px;line-height:1.5;color:var(--muted)}
+.plan-card{margin-top:12px;padding:12px 14px;border:1px solid #cfe0d2;border-radius:12px;background:#f1f6ef}.plan-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px}.plan-steps{margin:8px 0 10px;padding-left:20px;font-size:12px;line-height:1.7}.plan-steps li.is-current{font-weight:700;color:var(--accent-strong)}
+.skill-plan{margin-left:auto;font-size:10px;font-weight:700;color:#5a4a12;background:#e7d98a;padding:4px 8px;border-radius:6px}
+@media(max-width:680px){.planner-form{flex-direction:column}.planner-send{width:100%}}

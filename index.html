@@ -35,6 +35,14 @@
 
     <section id="catalog" class="catalog-section" aria-label="Каталог навыков">
       <div class="catalog-heading"><div><span class="section-kicker">КАТАЛОГ</span><h2>Что тренируем сегодня</h2></div><p class="catalog-note">Каждый навык — уроки по шагам. Тренер переводит дальше только по тому, что реально видит.</p></div>
+      <div class="planner" id="planner" aria-label="Подбор навыков">
+        <div class="planner-head"><div><h3>Не знаешь, с чего начать?</h3><p>Опиши цель своими словами. Тренер соберёт маршрут из навыков каталога и честно скажет, если такого навыка пока нет.</p></div></div>
+        <div class="planner-chips"><button type="button" class="planner-chip">Хочу научиться чеканить, но мяч всё время падает</button><button type="button" class="planner-chip">Хочу укрепить ноги перед футболом</button><button type="button" class="planner-chip">Хочу научиться стоять на руках</button></div>
+        <div id="plannerLog" class="chat-log" aria-live="polite" hidden></div>
+        <form id="plannerForm" class="planner-form"><input id="plannerInput" maxlength="200" placeholder="Например: хочу научиться чеканить" autocomplete="off" aria-label="Чему хочешь научиться"><button id="plannerSend" type="submit" class="primary-button planner-send">Спросить тренера</button></form>
+        <p id="plannerStatus" class="planner-status">Маршрут собирается только из навыков каталога. С включённым «Живым тренером» отвечает локальная модель, без него подбор по ключевым словам.</p>
+        <div id="planCard" class="plan-card" hidden><div class="plan-head"><strong id="planGoal">Твой маршрут</strong><button id="planClear" type="button" class="text-button">Сбросить</button></div><ol id="planSteps" class="plan-steps"></ol><button id="planStart" type="button" class="primary-button">Начать с первого навыка<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></button></div>
+      </div>
       <div id="catalogList" class="catalog-list" role="radiogroup" aria-label="Навыки"></div>
     </section>
 
