@@ -2,6 +2,7 @@ import { createCoachEngine, observePose, trackBall, createSession, stepSession, 
 import { SKILL_LIST, getSkill, PERSONALITIES, personalityId } from './skills/index.js';
 import { createLocalCoach, buildSummary, supportsWebGPU, LLM_MODELS } from './coach-llm.js';
 import { keywordPlan, buildPlannerMessages, parsePlan, planReplyText, nextInPlan, pluralize } from './coach-planner.js';
+import { compareProgress } from './coach-progress.js';
 
 const $ = id => document.getElementById(id);
 const app = $('app');
@@ -324,17 +325,26 @@ function renderHistory() {
     const p = document.createElement('p'); p.textContent = 'Здесь появятся итоги твоих тренировок. Демо в историю не записывается.';
     copy.append(h, p); empty.append(copy); $('historyList').append(empty); return;
   }
-  for (const session of history) {
+  for (const [index, session] of history.entries()) {
     const row = document.createElement('article'); row.className = 'history-session';
     const skill = getSkill(session.skill);
     const title = document.createElement('strong'); title.textContent = `${skill.emoji} ${session.goal}`;
     const details = document.createElement('span');
     const parts = [new Date(session.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }), formatTime(session.seconds), `${session.metricValue ?? session.movements ?? 0} ${session.metricLabel || 'движений'}`];
+    parts.push(session.source === 'camera' ? 'Камера' : session.source === 'file' ? 'Видео' : 'Источник не указан');
     if (session.lessonsTotal) parts.push(`шагов ${session.lessonsDone}/${session.lessonsTotal}`);
     if (session.bestStreak) parts.push(`серия ${session.bestStreak}`);
     details.textContent = parts.join(' · ');
-    row.append(title, details); $('historyList').append(row);
+    row.append(title, details);
+    const progress = compareProgress(session, history.filter((_, otherIndex) => otherIndex !== index));
+    const comparison = document.createElement('p'); comparison.className = 'history-progress';
+    comparison.textContent = progress ? progress.text : 'Для этой записи сравнение недоступно.';
+    if (progress?.isNewBest) comparison.classList.add('is-best');
+    row.append(comparison); $('historyList').append(row);
   }
+  const note = document.createElement('p'); note.className = 'history-note';
+  note.textContent = 'Сравнение по последним 8 сохранённым тренировкам: отдельно для каждого навыка, показателя и источника. Количество движений не оценивает качество техники.';
+  $('historyList').append(note);
 }
 
 /* ───────────── Media & engine lifecycle ───────────── */
@@ -453,7 +463,10 @@ function stopSession(showSummary = true) {
   const useTouches = skill.id === 'football' && metrics.ballEverSeen;
   const metricValue = skill.id === 'football' ? (useTouches ? metrics.touches : metrics.lifts) : skill.id === 'squats' ? metrics.reps : metrics.balanceSeconds;
   const metricLabel = skill.id === 'football' ? (useTouches ? 'касаний' : 'подъёмов стопы') : skill.id === 'squats' ? 'повторов' : 'с баланса';
-  const record = { date: new Date().toISOString(), goal: sessionGoal, skill: sessionSkill, seconds: Math.floor(elapsedMs / 1000), metricValue: metricValue || 0, metricLabel, lessonsDone: metrics.lessonsDone || 0, lessonsTotal: skill.lessons.length, bestStreak: metrics.bestStreak || 0, cues: cues.length };
+  const metricKey = skill.id === 'football' ? (useTouches ? 'touches' : 'lifts') : skill.metric.key;
+  const record = { schemaVersion: 2, source: wasDemo ? 'demo' : source, metricKey, date: new Date().toISOString(), goal: sessionGoal, skill: sessionSkill, seconds: Math.floor(elapsedMs / 1000), metricValue: metricValue || 0, metricLabel, lessonsDone: metrics.lessonsDone || 0, lessonsTotal: skill.lessons.length, bestStreak: metrics.bestStreak || 0, cues: cues.length };
+  // Match the history window after insertion: the current result plus seven previous entries.
+  const progress = compareProgress(record, history.slice(0, 7));
   cancelRun(); setState('finished');
   text('stageHint', 'Готов к следующему эфиру?');
   if (!wasActive || !showSummary) return;
@@ -471,6 +484,7 @@ function stopSession(showSummary = true) {
   const nextLesson = skill.lessons[done];
   const planNext = !wasDemo && done >= skill.lessons.length ? nextInPlan(prefs.plan, sessionSkill) : null;
   row('Следующий шаг', planNext ? `Следующий навык по маршруту: «${getSkill(planNext).name}».` : nextLesson ? `${nextLesson.title}: ${nextLesson.goal.toLowerCase()}.` : mistake && mistakeAdvice[mistake.tag] ? mistakeAdvice[mistake.tag][1] : 'Повтори урок и попробуй увеличить серию.');
+  if (progress) row('Твой прогресс', progress.text);
   const note = document.createElement('p'); note.textContent = wasDemo ? 'Это была демонстрация на нарисованном спортсмене. Её показатели условные и не сохранены.' : skill.needsBall && !metrics.ballEverSeen ? 'Мяч не был виден камере, поэтому касания не считались: только подъёмы стопы по позе.' : 'Сохранён итог без видео. Все наблюдения сделаны моделями на твоём устройстве.';
   $('summaryNotes').append(note);
   $('summaryLive').hidden = true; text('summaryLiveText', '');
