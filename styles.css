@@ -89,7 +89,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .topbar-title { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
 .topbar-title strong { display: block; font-size: 18px; font-weight: 800; letter-spacing: -.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-title small { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tabbar { flex: none; display: flex; height: calc(var(--tab-h) + var(--safe-b)); padding: 0 6px var(--safe-b); background: var(--bg); box-shadow: 0 -1px 0 var(--line2); }
+.tabbar { flex: none; display: flex; height: calc(var(--tab-h) + 8px); margin: 0 8px calc(8px + var(--safe-b)); padding: 6px 6px 4px; border: 1px solid rgba(255, 255, 255, .16); border-radius: 28px; background: rgba(255, 255, 255, .12); box-shadow: 0 10px 30px rgba(0, 0, 0, .22), inset 0 1px 0 rgba(255, 255, 255, .2); backdrop-filter: blur(24px) saturate(1.45); -webkit-backdrop-filter: blur(24px) saturate(1.45); }
 .tab { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; padding: 0 0 9px; background: none; border: 0; color: var(--muted); font-size: 11px; font-weight: 600; transition: color .15s; }
 .tab .ic { width: 25px; height: 25px; }
 .tab[aria-current] { color: var(--blue-text); }
@@ -193,7 +193,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .topbar-title { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
 .topbar-title strong { display: block; font-size: 18px; font-weight: 800; letter-spacing: -.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-title small { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tabbar { flex: none; display: flex; height: calc(var(--tab-h) + var(--safe-b)); padding: 0 6px var(--safe-b); background: var(--bg); box-shadow: 0 -1px 0 var(--line2); }
+.tabbar { flex: none; display: flex; height: calc(var(--tab-h) + 8px); margin: 0 8px calc(8px + var(--safe-b)); padding: 6px 6px 4px; border: 1px solid rgba(255, 255, 255, .16); border-radius: 28px; background: rgba(255, 255, 255, .12); box-shadow: 0 10px 30px rgba(0, 0, 0, .22), inset 0 1px 0 rgba(255, 255, 255, .2); backdrop-filter: blur(24px) saturate(1.45); -webkit-backdrop-filter: blur(24px) saturate(1.45); }
 .tab { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; padding: 0 0 9px; background: none; border: 0; color: var(--muted); font-size: 11px; font-weight: 600; transition: color .15s; }
 .tab .ic { width: 25px; height: 25px; }
 .tab[aria-current] { color: var(--blue-text); }
