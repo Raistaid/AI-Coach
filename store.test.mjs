@@ -15,7 +15,9 @@ test('speech settings preserve values and bound invalid stored preferences', () 
   assert.equal(sanitizePrefs({ voiceRate: 1.25 }).voiceRate, 1.25);
   assert.equal(sanitizePrefs({ voiceVolume: 5, voiceRate: -1 }).voiceVolume, 1);
   assert.equal(sanitizePrefs({ voiceRate: -1 }).voiceRate, .5);
-  assert.equal(sanitizePrefs({ voiceRate: NaN }).voiceRate, 1);
+  assert.equal(sanitizePrefs({ voiceRate: NaN }).voiceRate, .7);
+  assert.equal(sanitizePrefs({}).voiceId, 'piper:ru_RU-dmitri-medium');
+  assert.equal(sanitizePrefs({}).voiceRate, .7);
 });
 test('profile is sanitized: trimmed name, known hue, no empty names', () => {
   assert.equal(sanitizeProfile({ name: '  Максим  ', hue: 999 }).name, 'Максим');

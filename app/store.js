@@ -58,7 +58,7 @@ export function greeting(name, hour = new Date().getHours()) {
 /* ───────────── Preferences ───────────── */
 
 // Front camera by default, the whole frame on screen; retain local voice/object settings.
-const DEFAULT_PREFS = { voice: true, voiceId: '', skeleton: true, mirror: true, objects: true, sound: true, autoFar: true, liveCoach: false, llmModel: 'default', skill: 'football', personality: 'calm', plan: [], planGoal: '', theme: 'system', facing: 'user', fit: 'contain', wide: true };
+const DEFAULT_PREFS = { voice: true, voiceId: 'piper:ru_RU-dmitri-medium', voiceRate: 0.7, skeleton: true, mirror: true, objects: true, sound: true, autoFar: true, liveCoach: false, llmModel: 'default', skill: 'football', personality: 'calm', plan: [], planGoal: '', theme: 'system', facing: 'user', fit: 'contain', wide: true };
 
 export function sanitizePrefs(raw) {
   const prefs = { ...DEFAULT_PREFS, ...(raw && typeof raw === 'object' ? raw : {}) };
@@ -73,13 +73,21 @@ export function sanitizePrefs(raw) {
   prefs.wide = prefs.wide !== false;
   prefs.voiceId = typeof prefs.voiceId === 'string' ? prefs.voiceId.slice(0, 300) : '';
   prefs.voiceVolume = Number.isFinite(prefs.voiceVolume) ? Math.max(0, Math.min(1, prefs.voiceVolume)) : 1;
-  prefs.voiceRate = Number.isFinite(prefs.voiceRate) ? Math.max(0.5, Math.min(1.5, prefs.voiceRate)) : 1;
+  prefs.voiceRate = Number.isFinite(prefs.voiceRate) ? Math.max(0.5, Math.min(1.5, prefs.voiceRate)) : DEFAULT_PREFS.voiceRate;
   if (typeof raw?.objects !== 'boolean' && typeof raw?.ball === 'boolean') prefs.objects = raw.ball;
   delete prefs.ball;
   for (const key of ['voice', 'skeleton', 'mirror', 'objects', 'sound', 'autoFar', 'liveCoach']) prefs[key] = Boolean(prefs[key]);
   return prefs;
 }
-export const loadPrefs = () => sanitizePrefs(storage.read(KEYS.prefs, {}));
+export function loadPrefs() {
+  const prefs = sanitizePrefs(storage.read(KEYS.prefs, {}));
+  // Apply the new voice default once to existing installations, then retain edits.
+  if (prefs.voiceDefaultsVersion !== 1) {
+    prefs.voiceId = DEFAULT_PREFS.voiceId; prefs.voiceRate = DEFAULT_PREFS.voiceRate;
+    prefs.voiceDefaultsVersion = 1; storage.write(KEYS.prefs, prefs);
+  }
+  return prefs;
+}
 export const savePrefs = (prefs) => storage.write(KEYS.prefs, prefs);
 
 /* ───────────── Training history ───────────── */
