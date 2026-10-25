@@ -3,98 +3,219 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#f5f7f3">
-  <meta name="description" content="Aimo — нейро-тренер в прямом эфире: камера телефона, распознавание позы и мяча на устройстве, подсказки по шагам урока.">
-  <title>Aimo — нейро-тренер в эфире</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23c1d7c5'/%3E%3Cpath d='M17 42 28 20h9l10 22h-9l-2-6H27l-3 6z' fill='%233b5947'/%3E%3C/svg%3E">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="Aimo — нейро-тренер в прямом эфире: чат с тренером, вертикальный эфир с камеры, распознавание позы и мяча на устройстве.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Aimo</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='1' x2='1' y2='0'%3E%3Cstop offset='0' stop-color='%23f9ce34'/%3E%3Cstop offset='.5' stop-color='%23ee2a7b'/%3E%3Cstop offset='1' stop-color='%236228d7'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='18' fill='url(%23g)'/%3E%3Cpath d='M18 44 29 20h6l11 24h-7l-2.4-6H27.4L25 44z' fill='%23fff'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-<div id="app" data-state="ready" data-mode="camera" data-sidebar="closed">
-  <aside id="sidebar" class="sidebar" aria-label="Главная навигация" hidden>
-    <div class="sidebar-header">
-    <a class="brand" href="#training" aria-label="Aimo, тренировка">
-      <span class="brand-mark"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m7 24 7-16h5l7 16h-6l-1.3-3.6h-6L11.3 24zm7-7h3l-1.5-4.1z" fill="currentColor"/></svg></span>
-      <span>aimo<span class="brand-period">.</span></span>
-    </a>
-    <button id="closeSidebar" class="icon-button" aria-label="Закрыть боковое меню" aria-controls="sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
-    </div>
-    <nav class="nav-links">
-      <a class="nav-link" href="#catalog"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg><span>Каталог навыков</span></a>
-      <a class="nav-link is-active" href="#training"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 3-2 7h6l-8 11 2-8H6z"/></svg><span>Тренировка</span><span class="nav-indicator"></span></a>
-      <a class="nav-link" href="#history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2.7 7M3 4v7h7M12 7v5l3 2"/></svg><span>Мой прогресс</span></a>
-    </nav>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="ig" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#f9ce34"/><stop offset=".5" stop-color="#ee2a7b"/><stop offset="1" stop-color="#6228d7"/></linearGradient>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/><path d="M12 8v8M8 12h8"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 8a4.3 4.3 0 0 1 7.5 2.5c0 5.4-7.5 10-7.5 10z"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="m3 11 18-8-8 18-2-8z"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5v14l12-7z"/></symbol>
+    <symbol id="i-flip" viewBox="0 0 24 24"><path d="M4 8V4h4m12 12v4h-4M4 4l4 4m12 12-4-4M20 10a8 8 0 0 0-12-5M4 14a8 8 0 0 0 12 5"/></symbol>
+    <symbol id="i-voice" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4zM15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></symbol>
+    <symbol id="i-skeleton" viewBox="0 0 24 24"><circle cx="12" cy="4" r="2"/><path d="M12 6v8m-7-5 7 2 7-2m-7 5-5 7m5-7 5 7"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5m11-5v5h-5"/></symbol>
+    <symbol id="i-skip" viewBox="0 0 24 24"><path d="M5 5v14l10-7zM19 5v14"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><path d="m9 3-1 3-3 1-2 3 2 2v3l3 1 1 3h4l1-3 3-1 2-3-2-2V7l-3-1-1-3z"/><circle cx="11" cy="11" r="3"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V4m-4 4 4-4 4 4M5 14v6h14v-6"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 2 2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5z"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14M3 10h4M3 14h4M17 10h4M17 14h4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+  </defs>
+</svg>
+
+<div id="app" class="app" data-screen="login" data-live="off" data-drawer="closed">
+
+  <section class="screen screen-login" data-screen="login" aria-label="Вход">
+    <form id="loginForm" class="login-card" autocomplete="off">
+      <h1 class="logo">Aimo</h1>
+      <p class="login-tagline">Нейро-тренер в прямом эфире</p>
+      <label class="field"><span>Как тебя зовут?</span><input id="loginName" maxlength="24" placeholder="Имя" required autocomplete="given-name"></label>
+      <div class="avatar-pick" role="radiogroup" aria-label="Цвет аватара" id="loginAvatars"></div>
+      <button id="loginSubmit" class="btn-primary" type="submit">Войти</button>
+      <p class="login-note"><svg class="ic"><use href="#i-lock"/></svg> Профиль хранится на этом устройстве. Без пароля, сервера и отправки видео.</p>
+    </form>
+  </section>
+
+  <button id="drawerBackdrop" class="drawer-backdrop" aria-label="Закрыть панель чатов" tabindex="-1" hidden></button>
+  <aside id="drawer" class="drawer" aria-label="История чатов" hidden>
+    <div class="drawer-head"><h2>Чаты</h2><button id="closeDrawer" class="icon-btn" aria-label="Закрыть"><svg class="ic"><use href="#i-x"/></svg></button></div>
+    <button id="drawerNew" class="drawer-new"><svg class="ic"><use href="#i-edit"/></svg> Новый чат</button>
+    <div id="drawerList" class="drawer-list"></div>
+    <button id="drawerClear" class="text-btn danger">Удалить все чаты</button>
   </aside>
 
-  <button id="sidebarBackdrop" class="sidebar-backdrop" aria-label="Закрыть меню" tabindex="-1" hidden></button>
-  <main class="main-shell" id="training">
-    <header class="page-header">
-      <div class="header-leading"><button id="openSidebar" class="icon-button menu-button" aria-label="Открыть боковое меню" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><div><h1>Нейро-тренер в эфире</h1><p>Выбери навык, включи камеру, тренер ведёт по шагам.</p></div></div>
-      <div class="header-actions"><span class="local-badge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6zM8 12l3 3 5-6"/></svg> AI на устройстве</span><button id="openSettings" class="icon-button settings-button" aria-label="Настройки тренировки"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-1 3-3 1-2 3 2 2v3l3 1 1 3h4l1-3 3-1 2-3-2-2V7l-3-1-1-3z"/><circle cx="11" cy="11" r="3"/></svg></button></div>
-    </header>
-
-    <section id="catalog" class="catalog-section" aria-label="Каталог навыков">
-      <div class="catalog-heading"><div><span class="section-kicker">КАТАЛОГ</span><h2>Что тренируем сегодня</h2></div><p class="catalog-note">Каждый навык — уроки по шагам. Тренер переводит дальше только по тому, что реально видит.</p></div>
-      <div class="planner" id="planner" aria-label="Подбор навыков">
-        <div class="planner-head"><div><h3>Не знаешь, с чего начать?</h3><p>Опиши цель своими словами. Тренер соберёт маршрут из навыков каталога и честно скажет, если такого навыка пока нет.</p></div></div>
-        <div class="planner-chips"><button type="button" class="planner-chip">Хочу научиться чеканить, но мяч всё время падает</button><button type="button" class="planner-chip">Хочу укрепить ноги перед футболом</button><button type="button" class="planner-chip">Хочу научиться стоять на руках</button></div>
-        <div id="plannerLog" class="chat-log" aria-live="polite" hidden></div>
-        <form id="plannerForm" class="planner-form"><input id="plannerInput" maxlength="200" placeholder="Например: хочу научиться чеканить" autocomplete="off" aria-label="Чему хочешь научиться"><button id="plannerSend" type="submit" class="primary-button planner-send">Спросить тренера</button></form>
-        <p id="plannerStatus" class="planner-status">Маршрут собирается только из навыков каталога. С включённым «Живым тренером» отвечает локальная модель, без него подбор по ключевым словам.</p>
-        <div id="planCard" class="plan-card" hidden><div class="plan-head"><strong id="planGoal">Твой маршрут</strong><button id="planClear" type="button" class="text-button">Сбросить</button></div><ol id="planSteps" class="plan-steps"></ol><button id="planStart" type="button" class="primary-button">Начать с первого навыка<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></button></div>
+  <section class="screen screen-chat" data-screen="chat" aria-label="Чат с тренером">
+    <header class="topbar">
+      <button id="openDrawer" class="icon-btn" aria-label="Открыть историю чатов" aria-controls="drawer" aria-expanded="false"><svg class="ic"><use href="#i-menu"/></svg></button>
+      <div class="topbar-title">
+        <span class="avatar ring coach" aria-hidden="true"><svg class="ic"><use href="#i-spark"/></svg></span>
+        <div><strong id="chatTitle">Aimo тренер</strong><small id="chatSub">в сети · ИИ на устройстве</small></div>
       </div>
-      <div id="catalogList" class="catalog-list" role="radiogroup" aria-label="Навыки"></div>
-    </section>
+      <button id="newChatBtn" class="icon-btn" aria-label="Новый чат"><svg class="ic"><use href="#i-edit"/></svg></button>
+    </header>
+    <div id="storiesRow" class="stories" aria-label="Навыки"></div>
+    <div id="chatList" class="chat-list"></div>
+    <div id="chatTyping" class="typing" hidden><span></span><span></span><span></span></div>
+    <div id="chatChips" class="chips"></div>
+    <form id="chatForm" class="composer">
+      <input id="chatInput" maxlength="200" placeholder="Напиши тренеру…" autocomplete="off" aria-label="Сообщение тренеру">
+      <button id="chatSend" type="submit" class="send-btn" aria-label="Отправить"><svg class="ic"><use href="#i-send"/></svg></button>
+    </form>
+  </section>
 
-    <div class="studio-layout">
-      <section class="video-column" aria-label="Трансляция тренировки">
-        <div class="stage-toolbar"><div class="stage-title"><span class="status-dot" id="statusDot"></span><span id="statusText">Готов к тренировке</span></div><span class="stage-session" id="sessionLabel">ПРИВАТНЫЙ ЭФИР</span></div>
-        <div class="video-stage">
-          <video id="cameraVideo" autoplay muted playsinline aria-label="Видео с камеры"></video>
-          <canvas id="demoCanvas" aria-label="Демонстрационная анимация"></canvas>
-          <canvas id="poseCanvas" aria-label="Разметка движений"></canvas>
-          <div class="stage-vignette"></div>
-          <div class="live-top"><div class="live-tag" id="modeBadge">КАМЕРА</div><span class="live-timer"><span></span><span id="timerValue">00:00</span></span><button id="stopSession" class="stage-close" aria-label="Завершить тренировку"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
-          <div class="camera-placeholder" id="cameraPlaceholder">
-            <div class="athlete-illustration" aria-hidden="true">
-              <svg viewBox="0 0 290 320" fill="none"><ellipse cx="145" cy="291" rx="105" ry="14" fill="#7d9f86" fill-opacity=".06"/><path d="m135 109-25 65 35 37 38-39-15-57" fill="#7d9f86" fill-opacity=".14" stroke="#7d9f86" stroke-opacity=".7" stroke-width="2" stroke-linejoin="round"/><circle cx="154" cy="76" r="22" stroke="#7d9f86" stroke-width="2"/><path d="m131 119-31 22-27-12m95-10 29 28 27-6M131 198l-13 46-23 30m58-68 34 27 20-30" stroke="#7d9f86" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/><path d="m95 274-14 5m126-76 9-11" stroke="#7d9f86" stroke-width="7" stroke-linecap="round"/><circle cx="219" cy="174" r="18" fill="#dce8dc" stroke="#7d9f86" stroke-width="2"/><path d="m219 164 8 6-3 9h-10l-3-9zM219 164l-3-7m11 13 9-1m-12 10 4 9m-14-9-7 6m4-15-8-4" stroke="#7d9f86" stroke-width="1.5"/><circle cx="100" cy="141" r="4" fill="#fff"/><circle cx="118" cy="244" r="4" fill="#fff"/><circle cx="187" cy="233" r="4" fill="#fff"/></svg>
-            </div>
-            <div class="placeholder-copy"><h2 id="placeholderTitle">Выходи в эфир.<br>Тренер уже здесь.</h2><p id="placeholderText">Камера телефона, поза и мяч распознаются на устройстве.<br>Видео никуда не уходит.</p></div>
-            <div class="start-actions"><button id="startCamera" class="primary-button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="13" height="14" rx="3"/><path d="m16 10 5-3v10l-5-3"/></svg><span>Начать эфир</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></button><button id="startDemo" class="demo-button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 11 7-11 7z"/></svg>Посмотреть демо</button></div>
-            <p class="camera-error" id="cameraError" role="alert" hidden></p>
-          </div>
-          <div class="live-context"><span class="context-pill"><span class="small-spark">✦</span> <span id="sessionGoal">Учусь чеканить мяч</span></span><span class="context-pill coach-pill" id="coachPill">Спокойный тренер</span>
-            <div class="lesson-hud" id="lessonHud" role="status" aria-live="polite"><div class="lesson-row"><span class="lesson-step" id="lessonStep">Шаг 1/6</span><strong class="lesson-title" id="lessonTitle">Стойка</strong><span class="lesson-count" id="lessonCount">0/3</span></div><div class="lesson-bar"><div id="lessonBar"></div></div><p class="lesson-goal" id="lessonGoal">Стой устойчиво 3 секунды</p><button id="skipLesson" class="lesson-skip" type="button">Пропустить шаг</button></div></div>
-          <div class="feedback-overlay"><div class="coach-online"><span class="coach-avatar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5z"/></svg></span><span id="coachName">Твой AI-тренер <span class="online-dot"></span></span></div><div id="feedbackList" class="feedback-list" aria-live="polite" aria-relevant="additions"></div></div>
-          <div class="stage-hint" id="stageHint">В кадре должно быть видно всё тело</div>
-          <div class="stage-flash" id="stageFlash" aria-hidden="true"></div>
-          <div class="far-overlay" id="farOverlay" aria-hidden="true"><p class="far-step" id="farStep"></p><p class="far-text" id="farText"></p></div>
-          <div class="loading-cover"><div class="loading-orbit"></div><h3>Готовим твоего тренера</h3><p id="loadingText">Загружаем модели позы и мяча…</p></div>
-        </div>
-        <div class="live-controls"><button id="toggleVoice" class="control-button" aria-label="Озвучивание подсказок" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4zM15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></svg><span>Голос</span></button><button id="toggleSkeleton" class="control-button" aria-label="Показать разметку тела" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="4" r="2"/><path d="M12 6v8m-7-5 7 2 7-2m-7 5-5 7m5-7 5 7"/></svg><span>Разметка</span></button><button id="toggleFar" class="control-button" aria-label="Крупный режим для тренировки на расстоянии" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5m11-5v5h-5"/></svg><span>Крупно</span></button><button id="pauseSession" class="control-button pause-button" aria-label="Приостановить тренировку"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14M15 5v14"/></svg><span>Пауза</span></button><button id="switchCamera" class="control-button" aria-label="Переключить камеру"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V4h4m12 12v4h-4M4 4l4 4m12 12-4-4M20 10a8 8 0 0 0-12-5M4 14a8 8 0 0 0 12 5"/></svg><span>Камера</span></button></div>
-        <div class="stage-footer"><span class="footer-lock"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Приватная тренировка · без записи видео</span><button id="uploadVideo" class="text-button">Открыть видео<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m-4 4 4-4 4 4M4 15v5h16v-5"/></svg></button><input type="file" id="videoFile" accept="video/*" hidden></div>
-      </section>
+  <section class="screen screen-catalog" data-screen="catalog" aria-label="Навыки">
+    <header class="topbar"><div class="topbar-title"><div><strong>Навыки</strong><small>Переход между шагами только по реальным движениям</small></div></div></header>
+    <div id="catalogGrid" class="catalog-grid"></div>
+    <p class="muted-note">В каталоге только работающие навыки. Новый навык добавляется одним файлом в <code>skills/</code>.</p>
+  </section>
 
-      <aside class="coaching-column" aria-label="План и обратная связь">
-        <section class="goal-card panel"><h2>Твоя тренировка</h2><div class="chosen-skill"><span class="chosen-emoji" id="chosenEmoji">⚽</span><div><strong id="chosenName">Чеканка мяча</strong><small id="chosenMeta">Новичок · 6 шагов · 10 мин</small></div><a class="text-button" href="#catalog">Сменить</a></div>
-        <span class="field-label" id="personalityLabel">Характер тренера</span><div class="personality-row" role="radiogroup" aria-labelledby="personalityLabel" id="personalityRow"></div>
-        <label class="field-label" for="goalInput">Твоя цель</label><input id="goalInput" class="goal-input" value="Учусь чеканить мяч" maxlength="120" placeholder="Чему хочешь научиться?"><p id="skillDescription" class="goal-description">Шесть шагов: стойка, подъёмы без мяча, первое касание и серии.</p><p class="camera-hint" id="cameraHint">Телефон на земле у стены, 2–3 метра, видно всё тело и мяч.</p></section>
+  <section class="screen screen-progress" data-screen="progress" aria-label="Прогресс">
+    <header class="topbar"><div class="topbar-title"><div><strong>Прогресс</strong><small>Только то, что увидели модели на устройстве</small></div></div><button id="clearHistory" class="icon-btn" aria-label="Очистить историю"><svg class="ic"><use href="#i-trash"/></svg></button></header>
+    <div class="stats">
+      <div><b id="statTrainings">0</b><span>тренировок</span></div>
+      <div><b id="statMinutes">0</b><span>минут</span></div>
+      <div><b id="statStreak">0</b><span>лучшая серия</span></div>
+      <div><b id="statDays">0</b><span>дней подряд</span></div>
+    </div>
+    <div id="historyList" class="history"></div>
+  </section>
 
-        <section class="metrics-card panel"><div class="panel-topline"><span class="section-kicker">Сессия</span><span class="subtle-live"><span></span> СЕЙЧАС</span></div><div class="metrics-grid"><div><strong id="movementValue">0</strong><span id="movementLabel">Касания мяча</span></div><div><strong id="secondValue">0</strong><span id="secondLabel">Лучшая серия</span></div></div><div class="session-track"><div id="sessionProgress"></div></div><p class="metric-note" id="metricNote">Касания считаются только когда камера видит мяч.</p></section>
+  <section class="screen screen-profile" data-screen="profile" aria-label="Профиль">
+    <header class="topbar"><div class="topbar-title"><div><strong>Профиль</strong><small>Тренер, эфир и оформление</small></div></div><button id="logoutBtn" class="text-btn">Выйти</button></header>
+    <div class="profile-head">
+      <span id="profileAvatar" class="avatar big ring"></span>
+      <div class="profile-name"><input id="profileNameInput" maxlength="24" aria-label="Имя"><small id="profileSince"></small></div>
+    </div>
+    <div class="avatar-pick" id="profileAvatars" role="radiogroup" aria-label="Цвет аватара"></div>
 
-        <section class="insights-card panel"><div class="panel-topline"><span class="section-kicker">Подсказки тренера</span></div><div id="insightList" class="insight-list"><div class="insight-empty"><span class="insight-line"></span><p>Здесь появятся наблюдения<br>и подсказки твоего тренера.</p></div></div><div class="model-state"><span></span><span id="modelStatus">AI подключится при старте</span></div></section>
-        <div class="setup-tip"><span>↗</span><p>Поставь телефон в 2–3 метрах.<br>Хороший свет поможет тренеру видеть движения.</p></div>
-      </aside>
+    <h3 class="section-title">Характер тренера</h3>
+    <div id="personalityRow" class="personalities" role="radiogroup" aria-label="Характер тренера"></div>
+
+    <h3 class="section-title">Эфир</h3>
+    <label class="row"><span><strong>Голос тренера</strong><small>Озвучивать подсказки</small></span><input id="voiceInput" type="checkbox" class="switch"></label>
+    <label class="row"><span><strong>Звуковые сигналы</strong><small>Касание, шаг урока, ошибка</small></span><input id="soundInput" type="checkbox" class="switch" checked></label>
+    <label class="row"><span><strong>Крупный режим на расстоянии</strong><small>Последняя фраза во весь кадр, когда ты далеко</small></span><input id="autoFarInput" type="checkbox" class="switch" checked></label>
+    <label class="row"><span><strong>Разметка тела</strong><small>Точки и линии поверх видео</small></span><input id="skeletonInput" type="checkbox" class="switch" checked></label>
+    <label class="row"><span><strong>Зеркальное видео</strong><small>Привычный вид с фронтальной камеры</small></span><input id="mirrorInput" type="checkbox" class="switch"></label>
+    <label class="row"><span><strong>Детектор мяча</strong><small>Касания и падения по траектории мяча</small></span><input id="ballInput" type="checkbox" class="switch" checked></label>
+
+    <h3 class="section-title">Живой тренер · бета</h3>
+    <label class="row"><span><strong>Локальная языковая модель</strong><small id="liveCoachHint">Отвечает в чате и пишет живые фразы в эфире. Нужен WebGPU.</small></span><input id="liveCoachInput" type="checkbox" class="switch"></label>
+    <div id="liveCoachBox" class="llm-box" hidden>
+      <div class="model-choice" role="radiogroup" aria-label="Размер модели"><label><input type="radio" name="llmModel" value="default" checked> Qwen 2.5 · 1.5B · около 1 ГБ</label><label><input type="radio" name="llmModel" value="small"> Qwen 2.5 · 0.5B · около 400 МБ</label></div>
+      <div class="progress"><div id="liveCoachProgress"></div></div>
+      <p id="liveCoachStatus" class="muted-note">Модель скачается один раз и останется в кеше браузера.</p>
     </div>
 
-    <section id="history" class="history-section"><div class="history-heading"><div><h2>Твой прогресс</h2></div><button id="clearHistory" class="text-button">Очистить историю</button></div><div id="historyList" class="history-list"><div class="history-empty"><span class="history-empty-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 17 5-5 4 3 7-10M15 5h5v5"/></svg></span><div><h3>Первая тренировка — начало истории</h3><p>После завершения здесь появится итог. Видео не сохраняется.</p></div><span class="history-empty-arrow">↗</span></div></div></section>
-  </main>
+    <h3 class="section-title">Оформление</h3>
+    <label class="row"><span><strong>Тема</strong><small>Как в системе, светлая или тёмная</small></span><select id="themeSelect" aria-label="Тема"><option value="system">Системная</option><option value="light">Светлая</option><option value="dark">Тёмная</option></select></label>
+    <p class="muted-note"><svg class="ic"><use href="#i-lock"/></svg> Всё хранится на этом устройстве. Видео не записывается и не отправляется.</p>
+  </section>
+
+  <nav class="tabbar" aria-label="Разделы">
+    <button class="tab" data-tab="chat" aria-label="Чат" aria-current="page"><svg class="ic"><use href="#i-home"/></svg></button>
+    <button class="tab" data-tab="catalog" aria-label="Навыки"><svg class="ic"><use href="#i-grid"/></svg></button>
+    <button class="tab tab-live" data-tab="live" aria-label="Начать эфир"><svg class="ic"><use href="#i-plus"/></svg></button>
+    <button class="tab" data-tab="progress" aria-label="Прогресс"><svg class="ic"><use href="#i-heart"/></svg></button>
+    <button class="tab tab-profile" data-tab="profile" aria-label="Профиль"><span id="tabAvatar" class="avatar tiny"></span></button>
+  </nav>
+
+  <div class="sheet-backdrop" data-sheet-backdrop hidden></div>
+  <div id="sheetSkill" class="sheet" role="dialog" aria-modal="true" aria-labelledby="skillSheetName" hidden>
+    <div class="sheet-grab"></div>
+    <div class="sheet-head"><span id="skillSheetEmoji" class="skill-emoji"></span><div><h2 id="skillSheetName"></h2><small id="skillSheetMeta"></small></div></div>
+    <p id="skillSheetDesc" class="sheet-text"></p>
+    <ol id="skillSheetSteps" class="steps"></ol>
+    <p class="camera-hint"><svg class="ic"><use href="#i-camera"/></svg><span id="skillSheetCamera"></span></p>
+    <div class="sheet-actions">
+      <button id="skillStart" class="btn-primary"><svg class="ic"><use href="#i-camera"/></svg> Начать эфир</button>
+      <div class="sheet-row"><button id="skillDemo" class="btn-ghost">Демо без камеры</button><button id="skillFile" class="btn-ghost"><svg class="ic"><use href="#i-film"/></svg> Открыть видео</button></div>
+    </div>
+    <input type="file" id="videoFile" accept="video/*" hidden>
+  </div>
+
+  <div id="sheetSummary" class="sheet" role="dialog" aria-modal="true" aria-labelledby="summaryTitle" hidden>
+    <div class="sheet-grab"></div>
+    <div class="sheet-head"><span class="summary-check"><svg class="ic"><use href="#i-check"/></svg></span><div><h2 id="summaryTitle">Хорошая работа</h2><small id="summarySub"></small></div></div>
+    <div class="stats compact">
+      <div><b id="summaryTime">00:00</b><span>в движении</span></div>
+      <div><b id="summaryMetric">0</b><span id="summaryMetricLabel">касаний</span></div>
+      <div><b id="summaryLessons">0/6</b><span>шагов</span></div>
+    </div>
+    <div id="summaryNotes" class="summary-notes"></div>
+    <div id="summaryLive" class="summary-live" hidden><span class="badge-llm">живой тренер</span><p id="summaryLiveText"></p></div>
+    <div class="sheet-actions">
+      <button id="summaryAgain" class="btn-primary">Ещё один эфир</button>
+      <div class="sheet-row"><button id="summaryShare" class="btn-ghost"><svg class="ic"><use href="#i-share"/></svg> Поделиться</button><button id="summaryClose" class="btn-ghost">В чат</button></div>
+    </div>
+    <p id="summaryPrivate" class="muted-note center">Сохранён только итог. Видео не записывалось.</p>
+  </div>
+
+  <section class="live" id="liveScreen" aria-label="Эфир" hidden>
+    <div class="stage" id="stage" data-far="false">
+      <video id="cameraVideo" autoplay muted playsinline aria-label="Видео с камеры"></video>
+      <canvas id="demoCanvas" aria-label="Демонстрационная анимация"></canvas>
+      <canvas id="poseCanvas" aria-label="Разметка движений"></canvas>
+      <div class="stage-vignette"></div>
+      <div class="stage-flash" id="stageFlash" aria-hidden="true"></div>
+      <div class="reactions" id="liveReactions" aria-hidden="true"></div>
+      <header class="live-top">
+        <span id="liveAvatar" class="avatar small ring"></span>
+        <div class="live-who"><strong id="liveName"></strong><small id="liveCoachName">Спокойный тренер</small></div>
+        <span class="live-badge" id="liveBadge">LIVE</span>
+        <span class="live-timer" id="liveTimer">00:00</span>
+        <button id="liveClose" class="icon-btn light" aria-label="Завершить эфир"><svg class="ic"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="lesson-hud" id="lessonHud" role="status" aria-live="polite">
+        <div class="lesson-row"><span id="lessonStep">Шаг 1/6</span><strong id="lessonTitle">Стойка</strong><span id="lessonCount">0/3</span></div>
+        <div class="lesson-bar"><div id="lessonBar"></div></div>
+        <p id="lessonGoal"></p>
+      </div>
+      <div class="live-metrics"><div><b id="liveMetricValue">0</b><span id="liveMetricLabel">касаний</span></div><div><b id="liveSecondValue">0</b><span id="liveSecondLabel">серия</span></div></div>
+      <div class="live-rail">
+        <button id="livePause" class="rail-btn" aria-label="Пауза"><svg class="ic"><use href="#i-pause"/></svg><span>Пауза</span></button>
+        <button id="liveFlip" class="rail-btn" aria-label="Переключить камеру"><svg class="ic"><use href="#i-flip"/></svg><span>Камера</span></button>
+        <button id="liveVoice" class="rail-btn" aria-label="Голос тренера" aria-pressed="true"><svg class="ic"><use href="#i-voice"/></svg><span>Голос</span></button>
+        <button id="liveSkeleton" class="rail-btn" aria-label="Разметка тела" aria-pressed="true"><svg class="ic"><use href="#i-skeleton"/></svg><span>Разметка</span></button>
+        <button id="liveFar" class="rail-btn" aria-label="Крупный режим" aria-pressed="false"><svg class="ic"><use href="#i-expand"/></svg><span>Крупно</span></button>
+        <button id="liveSkip" class="rail-btn" aria-label="Пропустить шаг"><svg class="ic"><use href="#i-skip"/></svg><span>Шаг</span></button>
+      </div>
+      <div class="live-feed" id="feedbackList" aria-live="polite" aria-relevant="additions"></div>
+      <div class="stage-hint" id="stageHint"></div>
+      <div class="far-overlay" id="farOverlay" aria-hidden="true"><p class="far-step" id="farStep"></p><p class="far-text" id="farText"></p></div>
+      <div class="loading-cover" id="loadingCover" hidden><div class="orbit"></div><h3>Готовим тренера</h3><p id="loadingText">Загружаем модели позы и мяча…</p></div>
+      <div class="live-error" id="liveError" hidden>
+        <h3>Эфир не запустился</h3>
+        <p id="liveErrorText"></p>
+        <button id="liveRetry" class="btn-primary">Попробовать снова</button>
+        <div class="sheet-row"><button id="liveErrorDemo" class="btn-ghost light">Демо без камеры</button><button id="liveErrorBack" class="btn-ghost light">В чат</button></div>
+      </div>
+    </div>
+  </section>
+
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-
-  <dialog id="settingsDialog" class="modal"><div class="modal-heading"><div><span class="section-kicker">ПОД ТЕБЯ</span><h2>Настройки тренировки</h2></div><button id="closeSettings" class="icon-button" aria-label="Закрыть настройки"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><label class="setting-row"><span><strong>Голос тренера</strong><small>Озвучивать новые подсказки</small></span><input id="voiceInput" type="checkbox" class="switch-input"></label><label class="setting-row"><span><strong>Разметка движений</strong><small>Показывать точки и линии тела</small></span><input id="skeletonInput" type="checkbox" class="switch-input" checked></label><label class="setting-row"><span><strong>Зеркальное изображение</strong><small>Привычный вид с фронтальной камеры</small></span><input id="mirrorInput" type="checkbox" class="switch-input" checked></label><label class="setting-row"><span><strong>Звуковые сигналы</strong><small>Короткий сигнал на касание, шаг урока и ошибку</small></span><input id="soundInput" type="checkbox" class="switch-input" checked></label><label class="setting-row"><span><strong>Крупный режим на расстоянии</strong><small>Когда ты далеко от камеры, последняя фраза показывается во весь экран</small></span><input id="autoFarInput" type="checkbox" class="switch-input" checked></label><label class="setting-row"><span><strong>Детектор мяча</strong><small>Считать касания и падения мяча</small></span><input id="ballInput" type="checkbox" class="switch-input" checked></label><label class="setting-row"><span><strong>Живой тренер · бета</strong><small id="liveCoachHint">Маленькая языковая модель прямо в браузере. Нужен WebGPU.</small></span><input id="liveCoachInput" type="checkbox" class="switch-input"></label><div class="live-coach-box" id="liveCoachBox" hidden><div class="model-choice" role="radiogroup" aria-label="Размер модели"><label><input type="radio" name="llmModel" value="default" checked> Qwen 2.5 · 1.5B · около 1 ГБ</label><label><input type="radio" name="llmModel" value="small"> Qwen 2.5 · 0.5B · около 400 МБ</label></div><div class="live-coach-progress"><div id="liveCoachProgress"></div></div><p class="live-coach-status" id="liveCoachStatus">Модель скачается один раз и останется в кеше браузера.</p></div><div class="modal-note"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6zM8 12l3 3 5-6"/></svg><p>Распознавание происходит на твоём устройстве. Мы не отправляем и не сохраняем видео.</p></div></dialog>
-
-  <dialog id="summaryDialog" class="modal summary-modal"><div class="modal-heading"><span class="section-kicker">ЕЩЁ ОДИН ШАГ ВПЕРЁД</span><button id="closeSummary" class="icon-button" aria-label="Закрыть итоги"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><div class="summary-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></div><h2 id="summaryTitle">Хорошая работа.</h2><p class="summary-subtitle" id="summarySubtitle">Каждая тренировка — вклад в твой навык.</p><div class="summary-stats"><div><strong id="summaryTime">00:00</strong><span>В движении</span></div><div><strong id="summaryMovements">0</strong><span id="summaryMovementsLabel">Касаний</span></div><div><strong id="summaryLessons">0/6</strong><span>Шагов урока</span></div></div><div id="summaryNotes" class="summary-notes"></div><div id="summaryLive" class="summary-live" hidden><span class="live-badge">живой тренер</span><p id="summaryLiveText"></p></div><button id="restartSession" class="primary-button">Ещё одна тренировка<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></button><p class="summary-private">Сохранён только итог. Видео осталось у тебя.</p></dialog>
 </div>
-<script type="module" src="./app.js"></script>
+<script type="module" src="./app/main.js"></script>
 </body>
 </html>
