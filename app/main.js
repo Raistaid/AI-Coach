@@ -388,7 +388,7 @@ function enterApp() {
 }
 /* ───────────── Offline ───────────── */
 // After the first visit the app and the vision models work without a network (sw.js).
-if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('./sw.js').catch(() => {});
+if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});
 window.addEventListener('offline', () => toast('Нет сети: тренер продолжает работать на устройстве'));
 window.addEventListener('online', () => toast('Сеть снова есть'));
 
