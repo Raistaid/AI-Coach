@@ -13,6 +13,13 @@ const storage = {
   read(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } },
   write(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Private browsing can restrict storage. */ } },
 };
+// One-time move of saved data from the old "ai-coach:" keys to "aimo:" after the rename.
+for (const name of ['preferences', 'sessions', 'sidebar-collapsed']) {
+  try {
+    const old = localStorage.getItem(`ai-coach:${name}`);
+    if (old !== null) { if (localStorage.getItem(`aimo:${name}`) === null) localStorage.setItem(`aimo:${name}`, old); localStorage.removeItem(`ai-coach:${name}`); }
+  } catch { /* storage unavailable */ }
+}
 
 /* ───────────── Sidebar (unchanged behaviour) ───────────── */
 const sidebarQuery = matchMedia('(max-width: 900px)');
@@ -30,7 +37,7 @@ function setSidebar(open, { persist = true, focus = true } = {}) {
   document.body.classList.toggle('menu-open', open && sidebarQuery.matches);
   if (open && sidebarQuery.matches) { sidebar.setAttribute('role', 'dialog'); sidebar.setAttribute('aria-modal', 'true'); }
   else { sidebar.removeAttribute('role'); sidebar.removeAttribute('aria-modal'); }
-  if (persist && !sidebarQuery.matches) storage.write('ai-coach:sidebar-collapsed', !open);
+  if (persist && !sidebarQuery.matches) storage.write('aimo:sidebar-collapsed', !open);
   if (focus) (open ? $('closeSidebar') : $('openSidebar')).focus();
 }
 $('openSidebar').addEventListener('click', () => setSidebar(true));
@@ -47,8 +54,8 @@ document.addEventListener('keydown', event => {
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   }
 });
-sidebarQuery.addEventListener('change', () => setSidebar(!sidebarQuery.matches && !storage.read('ai-coach:sidebar-collapsed', false), { persist: false, focus: false }));
-setSidebar(!sidebarQuery.matches && !storage.read('ai-coach:sidebar-collapsed', false), { persist: false, focus: false });
+sidebarQuery.addEventListener('change', () => setSidebar(!sidebarQuery.matches && !storage.read('aimo:sidebar-collapsed', false), { persist: false, focus: false }));
+setSidebar(!sidebarQuery.matches && !storage.read('aimo:sidebar-collapsed', false), { persist: false, focus: false });
 
 /* ───────────── State ───────────── */
 const cueLabels = {
@@ -70,7 +77,7 @@ const mistakeAdvice = {
   'squat-rise': ['Задержка в нижней точке', 'Поднимайся плавно сразу после сгибания.'],
   'balance-align': ['Наклон корпуса при балансе', 'Найди точку перед собой, плечи ровно.'],
 };
-const saved = storage.read('ai-coach:preferences', {});
+const saved = storage.read('aimo:preferences', {});
 const prefs = { voice: true, skeleton: true, mirror: false, ball: true, sound: true, autoFar: true, liveCoach: false, llmModel: 'default', skill: 'football', personality: 'calm', ...saved };
 if (!getSkill(prefs.skill) || getSkill(prefs.skill).id !== prefs.skill) prefs.skill = 'football';
 prefs.personality = personalityId(prefs.personality);
@@ -78,7 +85,7 @@ if (!LLM_MODELS[prefs.llmModel]) prefs.llmModel = 'default';
 prefs.plan = Array.isArray(prefs.plan) ? prefs.plan.filter(id => SKILL_LIST.some(k => k.id === id)).slice(0, 3) : [];
 prefs.planGoal = typeof prefs.planGoal === 'string' ? prefs.planGoal.slice(0, 200) : '';
 const plannerHistory = [];
-let history = storage.read('ai-coach:sessions', []);
+let history = storage.read('aimo:sessions', []);
 if (!Array.isArray(history)) history = [];
 history = history.filter(s => s && typeof s.seconds === 'number' && SKILL_LIST.some(k => k.id === s.skill)).slice(0, 8);
 
@@ -198,7 +205,7 @@ function applyPreferences() {
   overlay.style.opacity = prefs.skeleton ? '1' : '0';
   video.style.transform = prefs.mirror && source !== 'file' ? 'scaleX(-1)' : '';
   overlay.style.transform = prefs.mirror && source !== 'file' ? 'scaleX(-1)' : '';
-  storage.write('ai-coach:preferences', prefs);
+  storage.write('aimo:preferences', prefs);
 }
 function speak(message, kind = 'tip') {
   if (!prefs.voice || !('speechSynthesis' in window) || state !== 'live') return;
@@ -450,7 +457,7 @@ function stopSession(showSummary = true) {
   cancelRun(); setState('finished');
   text('stageHint', 'Готов к следующему эфиру?');
   if (!wasActive || !showSummary) return;
-  if (!wasDemo && record.seconds > 0) { history.unshift(record); history = history.slice(0, 8); storage.write('ai-coach:sessions', history); renderHistory(); }
+  if (!wasDemo && record.seconds > 0) { history.unshift(record); history = history.slice(0, 8); storage.write('aimo:sessions', history); renderHistory(); }
   text('summaryTitle', metrics.lessonsDone >= skill.lessons.length ? 'Урок пройден целиком.' : metrics.lessonsDone > 0 ? 'Хорошая работа.' : 'Начало положено.');
   text('summaryTime', formatTime(record.seconds)); text('summaryMovements', record.metricValue); text('summaryMovementsLabel', metricLabel);
   text('summaryLessons', `${record.lessonsDone}/${record.lessonsTotal}`);
@@ -738,7 +745,7 @@ document.querySelectorAll('input[name=llmModel]').forEach(radio => radio.addEven
 }));
 for (const dialog of [$('settingsDialog'), $('summaryDialog')]) dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close(); });
 $('goalInput').addEventListener('input', () => text('sessionGoal', $('goalInput').value.trim() || getSkill(prefs.skill).goal));
-$('clearHistory').addEventListener('click', () => { history = []; storage.write('ai-coach:sessions', history); renderHistory(); toast('История тренировок очищена'); });
+$('clearHistory').addEventListener('click', () => { history = []; storage.write('aimo:sessions', history); renderHistory(); toast('История тренировок очищена'); });
 $('uploadVideo').addEventListener('click', () => { unlockSpeech(); ensureAudio(); $('videoFile').click(); });
 $('videoFile').addEventListener('change', e => { startFile(e.target.files[0]); e.target.value = ''; });
 video.addEventListener('ended', () => { if (source === 'file' && state === 'live') stopSession(); });
