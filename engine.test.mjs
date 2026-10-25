@@ -321,3 +321,21 @@ test('session stepping is pure', () => {
   stepSession(session, obs, createBallState(), 0);
   assert.deepEqual(session, before);
 });
+
+import { farModeDecision } from './coach-engine.js';
+
+test('far mode switches only after a sustained distance change, with hysteresis', () => {
+  let d = farModeDecision(null, 0.4);
+  assert.equal(d.far, false);
+  for (let i = 0; i < 7; i++) d = farModeDecision(d, 0.2);
+  assert.equal(d.far, false, 'seven far frames are not enough');
+  d = farModeDecision(d, 0.2);
+  assert.equal(d.far, true, 'eighth far frame switches');
+  for (let i = 0; i < 20; i++) d = farModeDecision(d, 0.3);
+  assert.equal(d.far, true, 'inside the hysteresis band nothing changes');
+  for (let i = 0; i < 8; i++) d = farModeDecision(d, 0.4);
+  assert.equal(d.far, false, 'close again after eight near frames');
+  const kept = farModeDecision({ far: true, frames: 5 }, 0.4, 'missing');
+  assert.deepEqual(kept, { far: true, frames: 0 }, 'losing the person keeps the mode and resets the count');
+  assert.deepEqual(farModeDecision({ far: false, frames: 3 }, NaN), { far: false, frames: 0 });
+});

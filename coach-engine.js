@@ -390,6 +390,21 @@ export function mainMistake(session) {
   return corrective[0] ? { tag: corrective[0][0], count: corrective[0][1] } : null;
 }
 
+/**
+ * Distance ("far") display mode with hysteresis. `legScale` is the hip-to-ankle
+ * height in normalized frame units: under 0.26 the athlete is far from the
+ * phone, over 0.33 close again. A switch needs 8 consecutive good frames so a
+ * step or a jitter never flips the screen. Pure.
+ */
+export function farModeDecision(previous, legScale, quality = 'good') {
+  const state = previous || { far: false, frames: 0 };
+  if (quality !== 'good' || !Number.isFinite(legScale)) return { far: state.far, frames: 0 };
+  const wants = state.far ? legScale < 0.33 : legScale < 0.26;
+  if (wants === state.far) return { far: state.far, frames: 0 };
+  const frames = (state.frames || 0) + 1;
+  return frames >= 8 ? { far: wants, frames: 0 } : { far: state.far, frames };
+}
+
 /* ───────────────────────── Browser wiring ───────────────────────── */
 
 export async function createCoachEngine({ onStatus = () => {}, ball = true } = {}) {
@@ -480,6 +495,7 @@ export async function createCoachEngine({ onStatus = () => {}, ball = true } = {
         landmarks: observed.obs.points, ball: ballState.seen ? { x: ballState.x, y: ballState.y, r: ballState.r } : null,
         quality: observed.obs.quality, feedback: stepped.feedback, lesson: stepped.lesson, metrics: stepped.metrics,
         timing: { poseMs }, ballDetector: Boolean(detector),
+        scale: observed.obs.quality === 'good' ? observed.obs.legScale : null,
       };
     },
     close() { if (!closed) { closed = true; landmarker.close(); detector?.close(); } },

@@ -1,4 +1,4 @@
-import { createCoachEngine, observePose, trackBall, createSession, stepSession, describeLesson, createPoseState, createBallState, mainMistake, POSE_CONNECTIONS } from './coach-engine.js';
+import { createCoachEngine, observePose, trackBall, createSession, stepSession, describeLesson, createPoseState, createBallState, mainMistake, farModeDecision, POSE_CONNECTIONS } from './coach-engine.js';
 import { SKILL_LIST, getSkill, PERSONALITIES, personalityId } from './skills/index.js';
 import { createLocalCoach, buildSummary, supportsWebGPU, LLM_MODELS } from './coach-llm.js';
 
@@ -7,6 +7,7 @@ const app = $('app');
 const video = $('cameraVideo');
 const overlay = $('poseCanvas');
 const demoCanvas = $('demoCanvas');
+const stage = document.querySelector('.video-stage');
 const storage = {
   read(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } },
   write(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Private browsing can restrict storage. */ } },
@@ -69,7 +70,7 @@ const mistakeAdvice = {
   'balance-align': ['Наклон корпуса при балансе', 'Найди точку перед собой, плечи ровно.'],
 };
 const saved = storage.read('ai-coach:preferences', {});
-const prefs = { voice: true, skeleton: true, mirror: false, ball: true, liveCoach: false, llmModel: 'default', skill: 'football', personality: 'calm', ...saved };
+const prefs = { voice: true, skeleton: true, mirror: false, ball: true, sound: true, autoFar: true, liveCoach: false, llmModel: 'default', skill: 'football', personality: 'calm', ...saved };
 if (!getSkill(prefs.skill) || getSkill(prefs.skill).id !== prefs.skill) prefs.skill = 'football';
 prefs.personality = personalityId(prefs.personality);
 if (!LLM_MODELS[prefs.llmModel]) prefs.llmModel = 'default';
@@ -107,6 +108,10 @@ let liveCoachPromise = null;
 let lastLiveAt = 0;
 let liveTimer = 0;
 let pendingFinal = null;
+// Distance mode: automatic by the athlete's size in the frame, or forced by the button
+let farState = { far: false, frames: 0 };
+let farManual = null;
+let audioCtx = null;
 
 const formatTime = seconds => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
 const text = (id, value) => { if ($(id)) $(id).textContent = value; };
@@ -176,9 +181,10 @@ function setState(next) {
   $('pauseSession').setAttribute('aria-label', next === 'paused' ? 'Продолжить эфир' : 'Приостановить эфир');
   $('pauseSession').querySelector('span').textContent = next === 'paused' ? 'Продолжить' : 'Пауза';
   $('switchCamera').disabled = mode === 'demo' || source === 'file' || next === 'loading';
+  renderFar();
 }
 function applyPreferences() {
-  for (const key of ['voice', 'skeleton', 'mirror', 'ball', 'liveCoach']) if ($(key + 'Input')) $(key + 'Input').checked = !!prefs[key];
+  for (const key of ['voice', 'skeleton', 'mirror', 'ball', 'sound', 'autoFar', 'liveCoach']) if ($(key + 'Input')) $(key + 'Input').checked = !!prefs[key];
   document.querySelectorAll('input[name=llmModel]').forEach(r => { r.checked = r.value === prefs.llmModel; });
   $('liveCoachBox').hidden = !prefs.liveCoach;
   $('toggleVoice').setAttribute('aria-pressed', String(!!prefs.voice));
@@ -188,16 +194,63 @@ function applyPreferences() {
   overlay.style.transform = prefs.mirror && source !== 'file' ? 'scaleX(-1)' : '';
   storage.write('ai-coach:preferences', prefs);
 }
-function speak(message) {
-  if (!prefs.voice || !('speechSynthesis' in window) || performance.now() - lastSpoken < 5000 || state !== 'live') return;
-  lastSpoken = performance.now();
-  speechSynthesis.cancel();
+function speak(message, kind = 'tip') {
+  if (!prefs.voice || !('speechSynthesis' in window) || state !== 'live') return;
+  // Successes, warnings and lesson changes interrupt; plain tips wait their turn.
+  const urgent = kind !== 'tip';
+  const now = performance.now();
+  if (!urgent && (now - lastSpoken < 5000 || speechSynthesis.speaking)) return;
+  if (urgent && now - lastSpoken < 1200) return;
+  lastSpoken = now;
+  if (urgent) speechSynthesis.cancel();
   const p = PERSONALITIES[prefs.personality];
   const utterance = new SpeechSynthesisUtterance(message);
   utterance.lang = 'ru-RU'; utterance.rate = p.voiceRate; utterance.pitch = p.voicePitch;
   const voice = speechSynthesis.getVoices().find(v => v.lang.startsWith('ru'));
   if (voice) utterance.voice = voice;
   speechSynthesis.speak(utterance);
+}
+// iOS Safari only speaks if the first utterance starts inside a user gesture.
+function unlockSpeech() {
+  if (!('speechSynthesis' in window)) return;
+  try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; u.lang = 'ru-RU'; speechSynthesis.speak(u); speechSynthesis.getVoices(); } catch { /* voice is optional */ }
+}
+function ensureAudio() {
+  if (!prefs.sound) return;
+  try {
+    audioCtx ??= new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  } catch { audioCtx = null; }
+}
+// Short earcons synthesised on the fly: no files, recognisable from across the room.
+const EARCONS = { success: [[660, 0, .08], [880, .09, .14]], lesson: [[523, 0, .1], [659, .11, .1], [784, .22, .2]], warning: [[220, 0, .16], [196, .2, .24]] };
+function playCue(kind) {
+  const notes = EARCONS[kind];
+  if (!notes || !prefs.sound || !audioCtx || audioCtx.state !== 'running' || state !== 'live') return;
+  const t0 = audioCtx.currentTime;
+  for (const [freq, at, dur] of notes) {
+    const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+    osc.type = kind === 'warning' ? 'triangle' : 'sine'; osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, t0 + at);
+    gain.gain.exponentialRampToValueAtTime(0.22, t0 + at + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + at + dur);
+    osc.connect(gain).connect(audioCtx.destination); osc.start(t0 + at); osc.stop(t0 + at + dur + 0.02);
+  }
+}
+function flash(kind) {
+  const el = $('stageFlash'); el.removeAttribute('data-kind'); void el.offsetWidth; el.dataset.kind = kind;
+}
+const farActive = () => farManual ?? (prefs.autoFar && farState.far);
+function renderFar() {
+  const on = Boolean(farActive()) && ['live', 'paused'].includes(state);
+  stage.dataset.far = String(on);
+  $('toggleFar').setAttribute('aria-pressed', String(on));
+  if (!on) return;
+  const last = cues.at(-1);
+  $('farText').textContent = last?.text || ''; $('farText').className = `far-text ${last?.kind || 'tip'}`;
+}
+function updateFarStep(lesson) {
+  text('farStep', lesson.complete ? 'Урок пройден' : `Шаг ${lesson.index + 1}/${lesson.total} · ${lesson.unit === 'с' ? Math.floor(lesson.progress) : lesson.progress}/${lesson.target}`);
 }
 function addFeedback(feedback) {
   if (!feedback?.text) return;
@@ -212,7 +265,9 @@ function addFeedback(feedback) {
   const p = document.createElement('p'); p.textContent = feedback.text;
   bubble.append(author, p); item.append(avatar, bubble); $('feedbackList').append(item);
   while ($('feedbackList').children.length > 3) $('feedbackList').firstElementChild.remove();
-  renderInsights(); if (getSkill(sessionSkill).id !== 'football') text('secondValue', cues.length); speak(feedback.text);
+  renderInsights(); if (getSkill(sessionSkill).id !== 'football') text('secondValue', cues.length);
+  const kind = feedback.kind || 'tip';
+  speak(feedback.text, kind); flash(kind); playCue(kind); renderFar();
 }
 function renderInsights() {
   $('insightList').replaceChildren();
@@ -231,6 +286,7 @@ function renderLesson(lesson) {
   text('lessonCount', lesson.complete ? '✓' : `${lesson.unit === 'с' ? Math.floor(lesson.progress) : lesson.progress}/${lesson.target}${lesson.unit ? ' ' + lesson.unit : ''}`);
   $('lessonBar').style.width = lesson.complete ? '100%' : `${Math.min(100, lesson.target ? lesson.progress / lesson.target * 100 : 0)}%`;
   text('lessonGoal', lesson.goal);
+  updateFarStep(lesson);
 }
 function renderMetrics(metrics) {
   const skill = getSkill(sessionSkill);
@@ -282,6 +338,8 @@ function cancelRun() {
   clearTimeout(liveTimer); liveTimer = 0;
   overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height);
   if ('speechSynthesis' in window) speechSynthesis.cancel();
+  audioCtx?.suspend().catch(() => {});
+  $('stageFlash').removeAttribute('data-kind');
 }
 async function ensureEngine(run) {
   if (!enginePromise) {
@@ -298,6 +356,7 @@ function resetSession(newMode, newSource) {
   cancelRun();
   mode = newMode; source = newSource; app.dataset.mode = mode;
   elapsedMs = 0; cues = []; lastAnalysis = 0; lastVideoTime = -1; lastSpoken = -10000; lastResult = null; frames = { good: 0, total: 0 }; lastLiveAt = 0; pendingFinal = null;
+  farState = { far: false, frames: 0 }; farManual = null; text('farText', ''); text('farStep', '');
   sessionSkill = prefs.skill;
   sessionGoal = $('goalInput').value.trim() || getSkill(sessionSkill).goal;
   text('sessionGoal', sessionGoal); updateSkill();
@@ -431,6 +490,12 @@ function handleResult(result) {
     text('stageHint', result.quality === 'missing' ? 'Не вижу всё тело · отойди от камеры и добавь света' : result.quality === 'partial' ? 'Проверь, что плечи, колени и стопы в кадре' : result.lesson?.needsBall && !result.metrics.ballSeen ? 'Покажи мяч камере · касания считаются по нему' : 'Движения видны · продолжай в своём темпе');
   }
   if (result.feedback) addFeedback(result.feedback);
+  if (result.scale !== undefined) {
+    const next = farModeDecision(farState, result.scale ?? NaN, result.quality);
+    const switched = next.far !== farState.far;
+    farState = next;
+    if (switched && farManual === null && prefs.autoFar) { renderFar(); toast(next.far ? 'Ты далеко от камеры: включаю крупный режим' : 'Ты ближе к камере: обычная лента'); }
+  }
   maybeAskLiveCoach();
 }
 function tick(now, run) {
@@ -519,7 +584,7 @@ function renderDemo(now) {
     const observed = observePose(points, demo.pose, now, w / h, sessionSkill); demo.pose = observed.state;
     demo.ball = trackBall(detections, demo.ball, now, observed.obs, w / h);
     const stepped = stepSession(demo.session, observed.obs, demo.ball, now); demo.session = stepped.session;
-    handleResult({ landmarks: null, ball: null, quality: observed.obs.quality, feedback: stepped.feedback, lesson: stepped.lesson, metrics: stepped.metrics });
+    handleResult({ landmarks: null, ball: null, quality: observed.obs.quality, feedback: stepped.feedback, lesson: stepped.lesson, metrics: stepped.metrics, scale: observed.obs.quality === 'good' ? observed.obs.legScale : null });
   }
 }
 
@@ -557,8 +622,8 @@ function maybeAskLiveCoach() {
 }
 
 /* ───────────── Events ───────────── */
-$('startCamera').addEventListener('click', startCamera);
-$('startDemo').addEventListener('click', startDemo);
+$('startCamera').addEventListener('click', () => { unlockSpeech(); ensureAudio(); startCamera(); });
+$('startDemo').addEventListener('click', () => { unlockSpeech(); ensureAudio(); startDemo(); });
 $('stopSession').addEventListener('click', () => stopSession());
 $('pauseSession').addEventListener('click', togglePause);
 $('skipLesson').addEventListener('click', () => {
@@ -580,12 +645,18 @@ $('switchCamera').addEventListener('click', async () => {
 });
 $('toggleVoice').addEventListener('click', () => { prefs.voice = !prefs.voice; applyPreferences(); if (!prefs.voice && 'speechSynthesis' in window) speechSynthesis.cancel(); toast(prefs.voice ? 'Голосовые подсказки включены' : 'Голосовые подсказки выключены'); });
 $('toggleSkeleton').addEventListener('click', () => { prefs.skeleton = !prefs.skeleton; applyPreferences(); });
+$('toggleFar').addEventListener('click', () => {
+  farManual = !farActive(); renderFar();
+  toast(farManual ? 'Крупный режим: последняя фраза во весь экран' : 'Обычная лента комментариев');
+});
 $('openSettings').addEventListener('click', () => $('settingsDialog').showModal());
 $('closeSettings').addEventListener('click', () => $('settingsDialog').close());
 $('closeSummary').addEventListener('click', () => $('summaryDialog').close());
-$('restartSession').addEventListener('click', () => { $('summaryDialog').close(); setState('ready'); startCamera(); });
-for (const key of ['voice', 'skeleton', 'mirror', 'ball']) $(key + 'Input').addEventListener('change', () => {
+$('restartSession').addEventListener('click', () => { $('summaryDialog').close(); setState('ready'); unlockSpeech(); ensureAudio(); startCamera(); });
+for (const key of ['voice', 'skeleton', 'mirror', 'ball', 'sound', 'autoFar']) $(key + 'Input').addEventListener('change', () => {
   prefs[key] = $(key + 'Input').checked; applyPreferences();
+  if (key === 'sound' && prefs.sound) ensureAudio();
+  if (key === 'autoFar') renderFar();
   if (key === 'voice' && !prefs.voice && 'speechSynthesis' in window) speechSynthesis.cancel();
   if (key === 'ball') {
     if (['live', 'paused', 'loading'].includes(state)) toast('Настройка мяча применится при следующем эфире');
@@ -603,7 +674,7 @@ document.querySelectorAll('input[name=llmModel]').forEach(radio => radio.addEven
 for (const dialog of [$('settingsDialog'), $('summaryDialog')]) dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close(); });
 $('goalInput').addEventListener('input', () => text('sessionGoal', $('goalInput').value.trim() || getSkill(prefs.skill).goal));
 $('clearHistory').addEventListener('click', () => { history = []; storage.write('ai-coach:sessions', history); renderHistory(); toast('История тренировок очищена'); });
-$('uploadVideo').addEventListener('click', () => $('videoFile').click());
+$('uploadVideo').addEventListener('click', () => { unlockSpeech(); ensureAudio(); $('videoFile').click(); });
 $('videoFile').addEventListener('change', e => { startFile(e.target.files[0]); e.target.value = ''; });
 video.addEventListener('ended', () => { if (source === 'file' && state === 'live') stopSession(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'live') { togglePause(); toast('Эфир на паузе, пока вкладка скрыта'); } });
