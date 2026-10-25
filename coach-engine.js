@@ -431,7 +431,7 @@ export async function createCoachEngine({ onStatus = () => {}, ball = true } = {
       try { detector = await ObjectDetector.createFromOptions(vision, ballOptions); }
       catch {
         try { detector = await ObjectDetector.createFromOptions(vision, { ...ballOptions, baseOptions: { ...ballOptions.baseOptions, delegate: 'CPU' } }); }
-        catch (cause) { console.warn('AI-Coach: ball detector unavailable', cause); detector = null; }
+        catch (cause) { console.warn('Aimo: ball detector unavailable', cause); detector = null; }
       }
     }
     onStatus(detector ? 'AI-модели готовы · поза и мяч на устройстве' : 'AI-модель готова · поза на устройстве, мяч не отслеживается');

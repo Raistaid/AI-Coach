@@ -423,7 +423,7 @@ function showError(error) {
   const messages = { NotAllowedError: 'Доступ к камере не разрешён. Разреши камеру в настройках сайта или попробуй демо.', NotFoundError: 'Камера не найдена. Подключи камеру или открой видеофайл.', NotReadableError: 'Камера занята другим приложением. Закрой его и попробуй снова.' };
   const message = messages[error.name] || (error.message?.includes('HTTPS') ? error.message : 'Не удалось подготовить тренировку. Проверь интернет и доступ к камере. Можно открыть демо.');
   text('cameraError', message); $('cameraError').hidden = false; text('stageHint', 'Демо доступно без камеры');
-  console.warn('AI-Coach session:', error.name, error.message);
+  console.warn('Aimo session:', error.name, error.message);
 }
 function snapshot() {
   const session = mode === 'demo' ? demo?.session : engine?.session;
@@ -664,8 +664,8 @@ async function askPlanner(message) {
       const coach = await ensureLiveCoach();
       const raw = await coach.chat(buildPlannerMessages(query, SKILL_LIST, plannerHistory), { maxTokens: 220 });
       const parsed = parsePlan(raw, SKILL_LIST);
-      if (parsed.ok) result = parsed; else console.warn('AI-Coach planner: LLM reply rejected,', parsed.reason);
-    } catch (error) { console.warn('AI-Coach planner: LLM unavailable', error?.message); }
+      if (parsed.ok) result = parsed; else console.warn('Aimo planner: LLM reply rejected,', parsed.reason);
+    } catch (error) { console.warn('Aimo planner: LLM unavailable', error?.message); }
   }
   const viaLlm = Boolean(result);
   if (!result) result = keywordPlan(query, SKILL_LIST);

@@ -149,7 +149,7 @@ export async function createLocalCoach({ modelId = LLM_MODELS.default.id, onStat
         const checked = validateReply(text, summary, mode);
         return checked.ok ? checked.text : null;
       } catch (error) {
-        console.warn('AI-Coach local LLM:', error);
+        console.warn('Aimo local LLM:', error);
         return null;
       } finally { busy = false; }
     },
@@ -161,7 +161,7 @@ export async function createLocalCoach({ modelId = LLM_MODELS.default.id, onStat
         const reply = await engine.chat.completions.create({ messages, temperature, top_p: 0.9, max_tokens: maxTokens });
         return reply?.choices?.[0]?.message?.content ?? '';
       } catch (error) {
-        console.warn('AI-Coach local LLM chat:', error);
+        console.warn('Aimo local LLM chat:', error);
         return null;
       } finally { busy = false; }
     },

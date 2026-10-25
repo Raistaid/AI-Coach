@@ -60,7 +60,7 @@ export function keywordPlan(message, skills) {
 /** Messages for the local LLM. The catalog is the only knowledge it gets. */
 export function buildPlannerMessages(message, skills, history = []) {
   const system = [
-    'Ты тренер приложения AI-Coach. Человек пишет, чему хочет научиться.',
+    'Ты тренер приложения Aimo. Человек пишет, чему хочет научиться.',
     `Собери маршрут только из навыков каталога, от простого к сложному, не больше ${MAX_PLAN}. Используй только id из каталога.`,
     'Каталог:',
     describeCatalog(skills),
