@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "python3 -m http.server 4173 --bind 127.0.0.1",
     "test": "node --test",
-    "build": "node scripts/build.mjs"
+    "build": "node scripts/build.mjs",
+    "check:syntax": "node scripts/check-syntax.mjs",
+    "check:site": "node scripts/check-site.mjs",
+    "check": "npm run check:syntax && npm test && npm run build && npm run check:site"
   }
 }
