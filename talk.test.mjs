@@ -24,7 +24,7 @@ test('goals and lookalikes are not swallowed by small talk', () => {
   assert.equal(detectIntent('давай научимся чеканить'), null, '«давай» inside a goal is not a bare yes');
   assert.equal(detectIntent('можно ли научиться летать'), null, '«можно ли» is a goal question, not consent');
   assert.equal(detectIntent('дальше'), null);
-  assert.equal(detectIntent('хочу без травм тренироваться'), null, 'avoiding injury is a goal, not pain');
+  assert.notEqual(detectIntent('хочу без травм тренироваться'), 'pain', 'avoiding injury is a goal, not pain');
   assert.equal(detectIntent('больше касаний'), null, '«больше» is not «боль»');
   assert.equal(looksLikeGoal('хочу научиться стоять на руках'), true);
   assert.equal(looksLikeGoal('как дела'), false);
@@ -96,4 +96,13 @@ test('metric phrases agree with the number', () => {
   assert.equal(metricPhrase(11, 'повторов'), '11 повторов');
   assert.equal(metricPhrase(22, 'с баланса'), '22 секунды баланса');
   assert.equal(metricPhrase(3, 'шагов'), '3 шагов', 'unknown labels are left as they are');
+});
+
+test('«давай потренируемся» is an invitation to train, not «не понял»', () => {
+  for (const message of ['Давай потренируемся', 'хочу потренироваться', 'го тренироваться', 'давай позанимаемся', 'начнём']) assert.equal(detectIntent(message), 'train', message);
+  const reply = talkReply('train', { ...base, skillName: 'Приседания' });
+  assert.match(reply.text, /«Приседания»/);
+  assert.equal(reply.offer, true, 'the next «давай» opens the live screen');
+  assert.equal(detectIntent('устал тренироваться'), 'tired', 'tiredness wins over training');
+  assert.notEqual(detectIntent('хочу научиться чеканить'), 'train');
 });

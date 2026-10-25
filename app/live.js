@@ -5,7 +5,8 @@ import { createCoachEngine, observePose, trackBall, createSession, stepSession, 
 import { getSkill, PERSONALITIES } from '../skills/index.js';
 import { buildSummary } from '../coach-llm.js';
 import { nextInPlan } from '../coach-planner.js';
-import { $, text, el, toast, haptic, bus, formatTime, openSheet, closeSheet, paintAvatar } from './ui.js';
+import { $, text, el, toast, haptic, bus, formatTime, openSheet, closeSheet, paintAvatar, rhythmNode } from './ui.js';
+import { rhythmStats, rhythmText } from '../rhythm.js';
 import * as store from './store.js';
 
 const cueLabels = {
@@ -39,6 +40,16 @@ let objectUrl = null; let wakeLock = null; let sessionSkill = 'football'; let la
 let frames = { good: 0, total: 0 }; let lastSpoken = 0; let demo = null; let lastLiveAt = 0;
 let farState = { far: false, frames: 0 }; let farManual = null; let audioCtx = null; let pendingFile = null;
 let lastSummaryText = '';
+// Camera view: the whole frame by default, the widest lens the phone offers.
+const ULTRA_WIDE = /ultra ?wide|сверхширок/i;
+let lens = { ultraId: null, active: false };
+let engineWantsBall = false;
+// Rhythm: the moments the engine counted touches, foot lifts or reps.
+const RHYTHM_WORDS = { touches: ['касания', 'касаниями'], lifts: ['подъёмы стопы', 'подъёмами'], reps: ['повторы', 'повторами'] };
+let tally = { key: null, count: 0, times: [] };
+// Technical line for phone tests: tap the timer or open the page with ?debug.
+let debugOn = /[?&]debug\b/.test(location.search);
+let rate = { n: 0, since: 0, fps: 0, poseMs: 0 };
 
 export function initLive({ prefs, profile, ensureLiveCoach, getLiveCoach, onHistory }) {
   Object.assign(ctx, { prefs, profile, ensureLiveCoach, getLiveCoach, onHistory });
@@ -48,6 +59,15 @@ export function initLive({ prefs, profile, ensureLiveCoach, getLiveCoach, onHist
   $('livePause').addEventListener('click', togglePause);
   $('liveSkip').addEventListener('click', () => { if (mode === 'demo' || !engine || state !== 'live') return; engine.skip(); toast('Шаг пропущен. Он отмечен как невыполненный.'); });
   $('liveFlip').addEventListener('click', flipCamera);
+  $('liveFit').addEventListener('click', () => {
+    ctx.prefs.fit = ctx.prefs.fit === 'cover' ? 'contain' : 'cover'; store.savePrefs(ctx.prefs); applyPrefs(); haptic(6);
+    toast(ctx.prefs.fit === 'cover' ? 'На весь экран: крупнее, края кадра обрезаны' : 'Весь кадр: видно то же, что анализирует тренер');
+  });
+  $('liveLens').addEventListener('click', () => {
+    ctx.prefs.wide = !lens.active; store.savePrefs(ctx.prefs);
+    restartCamera(() => (lens.active ? 'Широкий угол 0.5×' : 'Обычный угол 1×'));
+  });
+  $('liveTimer').addEventListener('click', () => { debugOn = !debugOn; renderDebug(); toast(debugOn ? 'Технические данные включены' : 'Технические данные скрыты'); });
   $('liveVoice').addEventListener('click', () => { ctx.prefs.voice = !ctx.prefs.voice; store.savePrefs(ctx.prefs); applyPrefs(); if (!ctx.prefs.voice && 'speechSynthesis' in window) speechSynthesis.cancel(); bus.emit('prefs-changed'); });
   $('liveSkeleton').addEventListener('click', () => { ctx.prefs.skeleton = !ctx.prefs.skeleton; store.savePrefs(ctx.prefs); applyPrefs(); bus.emit('prefs-changed'); });
   $('liveFar').addEventListener('click', () => { farManual = !farActive(); renderFar(); toast(farManual ? 'Крупный режим: последняя фраза во весь кадр' : 'Обычная лента комментариев'); });
@@ -73,7 +93,11 @@ export function setProfile(profile) { ctx.profile = profile; }
 /** Called when the ball-detector preference changes: the engine must be rebuilt. */
 export function resetEngine() {
   if (isActive()) { toast('Настройка мяча применится при следующем эфире'); return; }
-  const pending = enginePromise; engine = null; enginePromise = null; pending?.then(v => v.close()).catch(() => {});
+  dropEngine();
+}
+function dropEngine() {
+  const pending = enginePromise; engine = null; enginePromise = null; engineWantsBall = false;
+  pending?.then(v => v.close()).catch(() => {});
 }
 export function applyPrefs() {
   $('liveVoice').setAttribute('aria-pressed', String(ctx.prefs.voice));
@@ -83,6 +107,10 @@ export function applyPrefs() {
   const mirror = ctx.prefs.mirror && source === 'camera' && mode !== 'demo' && facingMode === 'user';
   if (video) video.style.transform = mirror ? 'scaleX(-1)' : '';
   if (overlay) overlay.style.transform = mirror ? 'scaleX(-1)' : '';
+  const whole = ctx.prefs.fit !== 'cover';
+  if (video) video.style.objectFit = whole ? 'contain' : 'cover';
+  $('liveFit').setAttribute('aria-pressed', String(whole));
+  $('liveFit').querySelector('span').textContent = whole ? 'Весь кадр' : 'Экран';
   renderFar();
 }
 
@@ -111,9 +139,9 @@ export async function startLive({ skillId, mode: newMode = 'camera', file = null
       text('loadingText', 'Подключаем камеру…');
       if (!window.isSecureContext) throw new Error('Для камеры нужна HTTPS-ссылка или localhost. Открой опубликованную версию.');
       if (!navigator.mediaDevices?.getUserMedia) throw new Error('Этот браузер не поддерживает камеру. Открой сайт в Safari или Chrome.');
-      const media = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: facingMode }, width: { ideal: 720 }, height: { ideal: 1280 } } });
+      const media = await openCamera();
       if (generation !== run) { media.getTracks().forEach(t => t.stop()); return; }
-      stream = media; video.srcObject = media; await video.play();
+      stream = media; video.srcObject = media; await video.play(); renderLens();
       await ensureEngine(run); if (generation !== run) return;
     }
     engine.start(sessionSkill, ctx.prefs.personality); beginLive(run);
@@ -125,6 +153,8 @@ function resetSession(newMode, newSource) {
   mode = newMode; source = newSource; $('app').dataset.mode = mode;
   elapsedMs = 0; cues = []; lastAnalysis = 0; lastVideoTime = -1; lastSpoken = -10000; lastResult = null; frames = { good: 0, total: 0 }; lastLiveAt = 0;
   farState = { far: false, frames: 0 }; farManual = null; text('farText', ''); text('farStep', '');
+  tally = { key: null, count: 0, times: [] }; rate = { n: 0, since: 0, fps: 0, poseMs: 0 };
+  lens = { ultraId: null, active: false }; renderLens(); renderDebug();
   $('feedbackList').replaceChildren(); $('liveReactions').replaceChildren(); $('liveError').hidden = true;
   text('liveTimer', '00:00'); text('liveMetricValue', '0'); text('liveSecondValue', '0');
   const skill = getSkill(sessionSkill);
@@ -133,6 +163,7 @@ function resetSession(newMode, newSource) {
   text('liveName', ctx.profile?.name || ''); paintAvatar($('liveAvatar'), ctx.profile);
   text('liveCoachName', `${PERSONALITIES[ctx.prefs.personality].name} тренер`);
   $('liveFlip').disabled = mode === 'demo' || source === 'file';
+  $('liveFit').disabled = mode === 'demo';
   $('liveSkip').disabled = mode === 'demo';
   applyPrefs();
   return generation;
@@ -179,25 +210,74 @@ function cancelRun() {
   $('stageFlash').removeAttribute('data-kind');
 }
 async function ensureEngine(run) {
+  // The ball detector is loaded only for skills with a ball: squats and balance start faster.
+  const wantBall = Boolean(ctx.prefs.ball && getSkill(sessionSkill).needsBall);
+  if (wantBall && !engineWantsBall && (engine || enginePromise)) dropEngine();
   if (!enginePromise) {
-    const pending = createCoachEngine({ ball: ctx.prefs.ball, onStatus(message) { if (generation === run) text('loadingText', message); } })
+    engineWantsBall = wantBall;
+    const pending = createCoachEngine({ ball: wantBall, onStatus(message) { if (generation === run) text('loadingText', message); } })
       .then(value => { if (enginePromise !== pending) { value.close(); throw new DOMException('Session cancelled', 'AbortError'); } engine = value; return value; })
       .catch(error => { if (enginePromise === pending) enginePromise = null; throw error; });
     enginePromise = pending;
   }
   return enginePromise;
 }
+const cameraConstraints = (extra) => ({ audio: false, video: { width: { ideal: 720 }, height: { ideal: 1280 }, ...extra } });
+/** Opens the camera; on the rear side prefers the ultra-wide lens when the phone has one. */
+async function openCamera() {
+  let media = await navigator.mediaDevices.getUserMedia(cameraConstraints({ facingMode: { ideal: facingMode } }));
+  lens = { ultraId: null, active: false };
+  if (facingMode === 'environment') {
+    try {
+      const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+      const ultra = cams.find(d => ULTRA_WIDE.test(d.label));
+      if (ultra) {
+        lens.ultraId = ultra.deviceId;
+        if (media.getVideoTracks()[0]?.getSettings?.().deviceId === ultra.deviceId) lens.active = true;
+        else if (ctx.prefs.wide) {
+          const wide = await navigator.mediaDevices.getUserMedia(cameraConstraints({ deviceId: { exact: ultra.deviceId } })).catch(() => null);
+          if (wide) { media.getTracks().forEach(t => t.stop()); media = wide; lens.active = true; }
+        }
+      }
+    } catch { /* the lens choice is optional */ }
+  }
+  // Cameras with optical or digital zoom start at their widest setting.
+  const track = media.getVideoTracks()[0];
+  try {
+    const caps = track?.getCapabilities?.();
+    if (caps?.zoom && Number.isFinite(caps.zoom.min) && (track.getSettings().zoom ?? caps.zoom.min) > caps.zoom.min) await track.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] });
+  } catch { /* zoom is not supported */ }
+  return media;
+}
+function renderLens() {
+  const button = $('liveLens');
+  button.hidden = !lens.ultraId || source !== 'camera';
+  button.textContent = lens.active ? '0.5×' : '1×';
+  button.setAttribute('aria-label', lens.active ? 'Широкий угол включён, переключить на обычный' : 'Включить широкий угол 0.5×');
+}
+async function restartCamera(message, onFail) {
+  if (!['live', 'paused'].includes(state) || source !== 'camera') return;
+  const run = generation + 1; cancelRun(); setState('loading'); text('loadingText', 'Переключаем камеру…');
+  try {
+    const media = await openCamera();
+    if (run !== generation) { media.getTracks().forEach(t => t.stop()); return; }
+    stream = media; video.srcObject = media; await video.play(); if (run !== generation) return;
+    lastVideoTime = -1; applyPrefs(); renderLens(); beginLive(run); toast(message());
+  } catch (error) { onFail?.(); if (run === generation) showError(error); }
+}
 async function flipCamera() {
   if (!['live', 'paused'].includes(state) || source !== 'camera') return;
   const previous = facingMode; facingMode = facingMode === 'user' ? 'environment' : 'user';
-  const run = generation + 1; cancelRun(); setState('loading'); text('loadingText', 'Переключаем камеру…');
-  try {
-    const media = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: facingMode }, width: { ideal: 720 }, height: { ideal: 1280 } } });
-    if (run !== generation) { media.getTracks().forEach(t => t.stop()); return; }
-    stream = media; video.srcObject = media; await video.play(); if (run !== generation) return;
+  await restartCamera(() => {
     ctx.prefs.facing = facingMode; store.savePrefs(ctx.prefs);
-    lastVideoTime = -1; applyPrefs(); beginLive(run); toast(facingMode === 'user' ? 'Фронтальная камера' : 'Задняя камера');
-  } catch (error) { facingMode = previous; if (run === generation) showError(error); }
+    return facingMode === 'user' ? 'Фронтальная камера' : `Задняя камера${lens.active ? ' · широкий угол 0.5×' : ''}`;
+  }, () => { facingMode = previous; });
+}
+function renderDebug() {
+  const line = $('liveDebug'); line.hidden = !debugOn || mode === 'demo';
+  if (line.hidden) return;
+  const size = video?.videoWidth ? `${video.videoWidth}×${video.videoHeight}` : '—';
+  line.textContent = `Анализ ${rate.fps.toFixed(1)} к/с · поза ${Math.round(rate.poseMs)} мс · видео ${size}${lens.active ? ' · 0.5×' : ''}`;
 }
 async function togglePause() {
   if (state === 'live') {
@@ -232,7 +312,12 @@ function tick(now, run) {
 function handleResult(result) {
   lastResult = result;
   frames.total += 1; if (result.quality === 'good') frames.good += 1;
-  renderMetrics(result.metrics); renderLesson(result.lesson);
+  renderMetrics(result.metrics); renderLesson(result.lesson); trackRhythm(result.metrics);
+  if (mode !== 'demo') {
+    const now = performance.now(); rate.n += 1; rate.poseMs = result.timing?.poseMs ?? rate.poseMs;
+    if (!rate.since) rate.since = now;
+    if (now - rate.since >= 1000) { rate.fps = (rate.n * 1000) / (now - rate.since); rate.n = 0; rate.since = now; renderDebug(); }
+  }
   if (mode !== 'demo') {
     drawPose(result.landmarks, result.ball);
     text('stageHint', result.quality === 'missing' ? 'Не вижу всё тело · отойди от камеры и добавь света' : result.quality === 'partial' ? 'Проверь, что плечи, колени и стопы в кадре' : result.lesson?.needsBall && !result.metrics.ballSeen ? 'Покажи мяч камере · касания считаются по нему' : 'Движения видны · продолжай в своём темпе');
@@ -244,6 +329,20 @@ function handleResult(result) {
     if (switched && farManual === null && ctx.prefs.autoFar) { renderFar(); toast(next.far ? 'Ты далеко от камеры: включаю крупный режим' : 'Ты ближе к камере: обычная лента'); }
   }
   maybeAskLiveCoach();
+}
+function trackRhythm(metrics) {
+  const skill = getSkill(sessionSkill);
+  let key; let count;
+  if (skill.id === 'football') { key = metrics.ballEverSeen ? 'touches' : 'lifts'; count = metrics.ballEverSeen ? metrics.touches : metrics.lifts; }
+  else if (skill.id === 'squats') { key = 'reps'; count = metrics.reps; }
+  else return; // balance is a hold, not a rhythm
+  if (key !== tally.key) tally = { key, count: count || 0, times: [] };
+  while (tally.count < (count || 0)) { tally.count += 1; if (tally.times.length < 300) tally.times.push(Math.round(elapsedMs)); }
+}
+function rhythmSummary() {
+  if (!tally.key || !tally.times.length) return null;
+  const [label, between] = RHYTHM_WORDS[tally.key];
+  return { key: tally.key, label, between, times: tally.times, durationMs: Math.max(1, Math.round(elapsedMs)), stats: rhythmStats(tally.times) };
 }
 function renderMetrics(metrics) {
   const skill = getSkill(sessionSkill);
@@ -347,7 +446,8 @@ function canvasContext(canvas) {
 function drawPose(landmarks, ball) {
   const { ctx: c, width, height } = canvasContext(overlay); c.clearRect(0, 0, width, height);
   if (!video.videoWidth) return;
-  const scale = Math.max(width / video.videoWidth, height / video.videoHeight);
+  const fill = ctx.prefs.fit === 'cover';
+  const scale = (fill ? Math.max : Math.min)(width / video.videoWidth, height / video.videoHeight);
   const ox = (width - video.videoWidth * scale) / 2, oy = (height - video.videoHeight * scale) / 2;
   const point = p => ({ x: p.x * video.videoWidth * scale + ox, y: p.y * video.videoHeight * scale + oy });
   if (landmarks?.length && ctx.prefs.skeleton) {
@@ -461,7 +561,7 @@ function stopSession() {
     done: done ? `выполнено ${done} из ${skill.lessons.length}${lastLesson ? `, последний «${lastLesson.title}»` : ''}${record.bestStreak ? `, лучшая серия ${record.bestStreak}` : ''}.` : 'шаги урока пока не засчитаны, это нормально для первого раза.',
     mistake: mistake && mistakeAdvice[mistake.tag] ? `${mistakeAdvice[mistake.tag][0].toLowerCase()} (${mistake.count} раз).` : mistake ? `${(cueLabels[mistake.tag] || mistake.tag).toLowerCase()} (${mistake.count} раз).` : 'явных ошибок тренер не заметил.',
     next: planNext ? `следующий навык по маршруту «${getSkill(planNext).name}».` : nextLesson ? `«${nextLesson.title}», ${nextLesson.goal.toLowerCase()}.` : mistake && mistakeAdvice[mistake.tag] ? mistakeAdvice[mistake.tag][1] : 'повтори урок и попробуй увеличить серию.',
-    live: '',
+    live: '', rhythm: rhythmSummary(),
   };
   text('summaryTitle', wasDemo ? 'Демо завершено' : done >= skill.lessons.length ? 'Урок пройден целиком' : done > 0 ? 'Хорошая работа' : 'Начало положено');
   text('summarySub', `${skill.emoji} ${skill.name} · ${PERSONALITIES[ctx.prefs.personality].name} тренер`);
@@ -471,7 +571,9 @@ function stopSession() {
   notes.append(el('p', 'muted-note', wasDemo ? 'Это была демонстрация на нарисованном спортсмене. Показатели условные и не сохранены.' : skill.needsBall && !metrics.ballEverSeen ? 'Мяч не был виден камере, поэтому касания не считались: только подъёмы стопы по позе.' : 'Все наблюдения сделаны моделями на твоём устройстве.'));
   text('summaryPrivate', wasDemo ? 'Демо не сохраняется в историю.' : 'Сохранён только итог. Видео не записывалось.');
   $('summaryLive').hidden = true; text('summaryLiveText', '');
-  lastSummaryText = `Aimo · ${skill.name}: ${formatTime(record.seconds)} в движении, ${record.metricValue} ${metricLabel}, шагов ${done}/${skill.lessons.length}. Получилось: ${data.done} Главная ошибка: ${data.mistake} Следующий шаг: ${data.next}`;
+  $('summaryRhythm').replaceChildren(); $('summaryRhythm').hidden = !data.rhythm;
+  if (data.rhythm) $('summaryRhythm').append(rhythmNode(data.rhythm));
+  lastSummaryText = `Aimo · ${skill.name}: ${formatTime(record.seconds)} в движении, ${record.metricValue} ${metricLabel}, шагов ${done}/${skill.lessons.length}. Получилось: ${data.done} Главная ошибка: ${data.mistake} Следующий шаг: ${data.next}${data.rhythm ? ` ${rhythmText(data.rhythm.stats, data.rhythm.between)}` : ''}`;
   openSheet('sheetSummary');
   if (planNext) { ctx.prefs.skill = planNext; store.savePrefs(ctx.prefs); toast(`Шаг маршрута пройден. Следующий навык: ${getSkill(planNext).name}`); }
   bus.emit('live-finished', data);

@@ -1,4 +1,5 @@
 // Small DOM helpers shared by the screens. No app state lives here.
+import { rhythmBuckets, rhythmText } from '../rhythm.js';
 export const $ = (id) => document.getElementById(id);
 export const text = (id, value) => { const node = $(id); if (node) node.textContent = value; };
 export function el(tag, className, content) {
@@ -70,4 +71,22 @@ export function paintAvatar(node, profile) {
 function initialsOf(name) {
   const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
   return parts.length ? parts.slice(0, 2).map(p => p[0].toUpperCase()).join('') : '?';
+}
+
+/** Bar strip of counted movements over the session, with the rhythm verdict under it. */
+export function rhythmNode(rhythm) {
+  const wrap = el('div', 'rhythm');
+  wrap.append(el('b', 'rhythm-title', `Ритм: ${rhythm.label}`));
+  const bars = rhythmBuckets(rhythm.times, rhythm.durationMs, 24);
+  const max = Math.max(1, ...bars);
+  const strip = el('div', 'rhythm-bars');
+  strip.setAttribute('role', 'img');
+  strip.setAttribute('aria-label', `Засчитано движений по ходу эфира: ${rhythm.times.length}`);
+  for (const value of bars) {
+    const bar = el('span', value ? '' : 'empty');
+    bar.style.height = `${value ? Math.round(24 + (76 * value) / max) : 8}%`;
+    strip.append(bar);
+  }
+  wrap.append(strip, el('small', 'rhythm-text', rhythmText(rhythm.stats, rhythm.between)));
+  return wrap;
 }

@@ -300,5 +300,11 @@ function enterApp() {
   chat.setHistory(history); chat.openFresh();
   showScreen('chat');
 }
+/* ───────────── Offline ───────────── */
+// After the first visit the app and the vision models work without a network (sw.js).
+if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('./sw.js').catch(() => {});
+window.addEventListener('offline', () => toast('Нет сети: тренер продолжает работать на устройстве'));
+window.addEventListener('online', () => toast('Сеть снова есть'));
+
 applyTheme();
 if (profile) enterApp(); else { app.dataset.screen = 'login'; setTimeout(() => $('loginName').focus(), 100); }

@@ -3,7 +3,7 @@
 // message is stored on the device. Live sessions post their summary here.
 import { SKILL_LIST, getSkill, PERSONALITIES } from '../skills/index.js';
 import { keywordPlan, buildPlannerMessages, parsePlan, planReplyText, pluralize } from '../coach-planner.js';
-import { $, text, el, icon, toast, haptic, bus, timeLabel, relativeDate, formatTime } from './ui.js';
+import { $, text, el, icon, toast, haptic, bus, timeLabel, relativeDate, formatTime, rhythmNode } from './ui.js';
 import * as store from './store.js';
 import { detectIntent, looksLikeGoal, talkReply, STRONG_INTENTS } from '../coach-talk.js';
 
@@ -170,6 +170,7 @@ function summaryCard(data) {
     if (!value) continue;
     const line = el('p', 'card-line'); line.append(el('b', null, `${label}: `), document.createTextNode(value)); card.append(line);
   }
+  if (data.rhythm?.times?.length) card.append(rhythmNode(data.rhythm));
   if (data.live) { const live = el('p', 'card-line llm'); live.append(el('span', 'badge-llm', 'живой тренер'), document.createTextNode(` ${data.live}`)); card.append(live); }
   if (data.demo) card.append(el('small', 'card-note', 'Симуляция на нарисованном спортсмене. В историю не записана.'));
   const again = el('button', 'btn-ghost small', data.demo ? 'Запустить эфир с камерой' : 'Повторить'); again.type = 'button';

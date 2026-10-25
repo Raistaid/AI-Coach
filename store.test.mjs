@@ -25,6 +25,10 @@ test('preferences fall back to safe defaults', () => {
   assert.equal(p.facing, 'user', 'front camera by default: the athlete must see the screen');
   assert.equal(sanitizePrefs({ facing: 'environment' }).facing, 'environment');
   assert.equal(sanitizePrefs({ facing: 'sideways' }).facing, 'user');
+  assert.equal(p.fit, 'contain', 'the whole camera frame by default, nothing cropped');
+  assert.equal(sanitizePrefs({ fit: 'zoom' }).fit, 'contain');
+  assert.equal(sanitizePrefs({}).wide, true, 'widest lens by default');
+  assert.equal(sanitizePrefs({ wide: false }).wide, false);
 });
 
 test('day streak counts consecutive training days back from today or yesterday', () => {
