@@ -4,7 +4,7 @@
 // queue that never cuts a phrase off. No frame ever leaves the device; the LLM
 // only receives numbers.
 import { createCoachEngine, observePose, trackBall, createSession, stepSession, describeLesson, createPoseState, createBallState, mainMistake, farModeDecision, POSE_CONNECTIONS } from '../coach-engine.js';
-import { getSkill, PERSONALITIES } from '../skills/index.js';
+import { getSkill, PERSONALITIES, SKILL_LIST } from '../skills/index.js';
 import { buildSummary } from '../coach-llm.js';
 import { nextInPlan, pluralize } from '../coach-planner.js';
 import { $, text, el, toast, haptic, bus, formatTime, openSheet, closeSheet, rhythmNode } from './ui.js';
@@ -190,13 +190,38 @@ function setMenu(open) {
 
 function showLive() { $('liveScreen').hidden = false; $('app').dataset.live = 'on'; closeSheet(); }
 function hideLive() {
-  cancelRun(); state = 'idle'; $('liveScreen').hidden = true; $('app').dataset.live = 'off'; $('liveError').hidden = true; $('loadingCover').hidden = true;
+  cancelRun(); state = 'idle'; $('skillPlate').hidden = true; $('liveScreen').hidden = true; $('app').dataset.live = 'off'; $('liveError').hidden = true; $('loadingCover').hidden = true;
   const pending = enginePromise; engine = null; enginePromise = null; pending?.then(value => value.close()).catch(() => {});
 }
 
-export async function startLive({ skillId, mode: newMode = 'camera', file = null } = {}) {
+/* The «Эфир» tab: the camera is on and a plate at the top offers the catalog. The button hides the
+   plate, the app opens a new chat for this session, and the live restarts with the chosen skill. */
+let plateSkill = null;
+function renderPlate(open) {
+  const plate = $('skillPlate'); plate.hidden = !open;
+  if (!open) return;
+  plateSkill = sessionSkill;
+  const list = $('skillPlateList'); list.replaceChildren();
+  for (const skill of SKILL_LIST) {
+    const chip = el('button', 'chip', `${skill.emoji} ${skill.short || skill.name}`); chip.type = 'button';
+    chip.setAttribute('role', 'radio'); chip.setAttribute('aria-checked', String(skill.id === plateSkill));
+    chip.addEventListener('click', () => { plateSkill = skill.id; haptic(6); list.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-checked', String(c === chip))); text('skillPlateLabel', `Начать эфир: ${skill.short || skill.name}`); });
+    list.append(chip);
+  }
+  text('skillPlateLabel', `Начать эфир: ${getSkill(plateSkill).short || getSkill(plateSkill).name}`);
+}
+export function initPlate() {
+  $('skillPlateGo').addEventListener('click', () => {
+    const skillId = plateSkill || sessionSkill; $('skillPlate').hidden = true; haptic(8);
+    bus.emit('live-pick', { skillId });
+    if (skillId !== sessionSkill || state === 'error') startLive({ skillId, mode: 'camera' });
+  });
+}
+
+export async function startLive({ skillId, mode: newMode = 'camera', file = null, pick = false } = {}) {
   unlockSpeech(); ensureAudio();
   sessionSkill = getSkill(skillId || ctx.prefs.skill).id; ctx.prefs.skill = sessionSkill; store.savePrefs(ctx.prefs);
+  renderPlate(pick && newMode === 'camera');
   pendingFile = newMode === 'file' ? file : null;
   if (newMode === 'file' && !file) { toast('Выбери видеофайл.'); return; }
   if (newMode === 'file' && !file.type.startsWith('video/')) { toast('Это не видеофайл.'); return; }

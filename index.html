@@ -230,6 +230,11 @@
         <button class="live-timer" id="liveTimer" type="button" aria-label="Время эфира. Нажми, чтобы показать технические данные">00:00</button>
         <button id="liveMore" class="glass-btn" type="button" aria-label="Настройки эфира" aria-expanded="false" aria-controls="liveMenu"><svg class="ic"><use href="#i-more"/></svg></button>
       </header>
+      <div id="skillPlate" class="skill-plate" hidden>
+        <p class="skill-plate-title">Что тренируем?</p>
+        <div id="skillPlateList" class="skill-plate-list" role="radiogroup" aria-label="Навык для эфира"></div>
+        <button id="skillPlateGo" class="btn-primary" type="button"><svg class="ic"><use href="#i-camera"/></svg> <span id="skillPlateLabel">Начать эфир</span></button>
+      </div>
 
       <div class="lesson-card" id="lessonHud" role="status" aria-live="polite">
         <div class="lesson-head"><span id="lessonStep">Шаг 1 из 3</span><span id="lessonCount">0/2 с</span></div>

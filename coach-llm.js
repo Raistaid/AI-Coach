@@ -188,6 +188,30 @@ export async function createLocalCoach({ modelId = LLM_MODELS.default.id, onStat
         return null;
       } finally { busy = false; }
     },
+    /**
+     * Streaming chat for the conversation screen: `onToken(fullText)` fires as the
+     * reply grows, `signal` interrupts generation. Resolves to the text produced so far
+     * (also after an interruption); the caller validates it.
+     */
+    async stream(messages, { maxTokens = 160, temperature = 0.6, onToken = () => {}, signal } = {}) {
+      if (closed || busy) return null;
+      busy = true;
+      let full = '';
+      const stop = () => { try { engine.interruptGenerate(); } catch { /* generation may be over */ } };
+      signal?.addEventListener('abort', stop, { once: true });
+      try {
+        if (signal?.aborted) return null;
+        const chunks = await engine.chat.completions.create({ messages, temperature, top_p: 0.9, max_tokens: maxTokens, stream: true });
+        for await (const chunk of chunks) {
+          const delta = chunk?.choices?.[0]?.delta?.content || '';
+          if (delta) { full += delta; onToken(full); }
+        }
+        return full;
+      } catch (error) {
+        console.warn('Aimo local LLM stream:', error);
+        return full || null;
+      } finally { signal?.removeEventListener('abort', stop); busy = false; }
+    },
     async unload() {
       if (closed) return;
       closed = true;

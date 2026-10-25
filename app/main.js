@@ -54,11 +54,14 @@ function showScreen(name) {
   if (name === 'profile') { renderProfile(); modelManager.refresh(); trainerAudio.refresh(); }
   if (name === 'catalog') renderCatalog();
   if (name === 'start') renderStart();
+  if (name === 'chat') warmLiveCoach();
   if (name !== 'chat') document.querySelector(`.screen-${name}`)?.scrollTo({ top: 0 });
   if (drawerOpen) setDrawer(false, { focus: false });
 }
 document.querySelectorAll('.tab[data-tab]').forEach(tab => tab.addEventListener('click', () => {
   haptic(6);
+  // «Эфир»: the camera comes on at once; the plate on top lets the person pick the skill.
+  if (tab.dataset.tab === 'start') { startSession({ skillId: prefs.skill, mode: 'camera', pick: true }); return; }
   if (tab.dataset.tab === app.dataset.screen) { document.querySelector(`.screen-${app.dataset.screen === 'chat' ? 'chat .chat-list' : app.dataset.screen}`)?.scrollTo({ top: app.dataset.screen === 'chat' ? 1e9 : 0, behavior: 'smooth' }); return; }
   showScreen(tab.dataset.tab);
 }));
@@ -295,11 +298,26 @@ function renderModels() {
   }
   $('cancelModelDownload').hidden = !modelManager.downloading;
   renderLocalVoiceControls();
+  chat.renderHeader();
+}
+/** What the chat shows about the model: running, starting, or absent. */
+const llmState = () => ({ loaded: Boolean(modelManager.loaded), loading: modelManager.busy && !modelManager.downloading, label: LLM_MODELS[prefs.llmModel].label });
+/** The downloaded model joins the chat: started in the background when the chat is in use. */
+function warmLiveCoach() {
+  if (!profile || !prefs.liveCoach || !supportsWebGPU() || live.isActive() || modelManager.busy || modelManager.loaded) return;
+  ensureLiveCoach().catch(() => {});
 }
 document.querySelectorAll('[data-download-model]').forEach(button => button.addEventListener('click', async () => {
   const key = button.dataset.downloadModel;
   text('liveCoachStatus', `Скачиваем ${LLM_MODELS[key].label}. Можно отменить загрузку.`);
-  try { await modelManager.download(key); text('liveCoachStatus', `${LLM_MODELS[key].label} скачана. Она будет использоваться в эфире и чате.`); }
+  try {
+    await modelManager.download(key);
+    text('liveCoachStatus', `${LLM_MODELS[key].label} скачана. Она будет использоваться в эфире и чате.`);
+    // The model is now part of the chat: tell the person there and start it right away.
+    if (prefs.llmModel !== key) { prefs.llmModel = key; store.savePrefs(prefs); applyPreferences(); }
+    chat.postSystem(`Живой тренер подключён: ${LLM_MODELS[key].label} теперь отвечает в чате и в эфире, всё на устройстве`);
+    warmLiveCoach();
+  }
   catch (error) { if (error.name !== 'AbortError') { text('liveCoachStatus', error.message); toast(error.message); } }
 }));
 $('cancelModelDownload').addEventListener('click', async () => { await modelManager.cancelDownload(); text('liveCoachStatus', 'Скачивание отменено.'); modelManager.refresh(); });
@@ -377,21 +395,25 @@ async function startSession(options) {
   live.startLive(options);
 }
 bus.on('start-live', startSession);
+// The plate's button: a fresh chat for this session, the skill becomes the current one.
+bus.on('live-pick', ({ skillId }) => { chat.newThread(); chat.introduceSkill(skillId); });
+live.initPlate();
 bus.on('gesture', () => { live.unlockSpeech(); live.ensureAudio(); });
 bus.on('live-final-text', data => chat.attachLiveText(data.live));
 bus.on('live-failed', () => chat.postSystem('Эфир не запустился'));
 bus.on('live-cancelled', () => chat.postSystem('Эфир отменён'));
-bus.on('live-finished', (data) => { chat.postSummary(data); if (app.dataset.screen === 'progress') renderProgress(); chat.setHistory(history); renderModels(); });
+bus.on('live-finished', (data) => { chat.postSummary(data); if (app.dataset.screen === 'progress') renderProgress(); chat.setHistory(history); renderModels(); warmLiveCoach(); });
 live.initLive({
   prefs, profile, ensureLiveCoach, getLiveCoach: () => modelManager.loaded,
-  async releaseCoach(coach) { if (!live.isActive() && (!coach || modelManager.loaded === coach)) await unloadLiveCoach(); },
+  // After the live screen the model stays for the chat while the setting is on; otherwise it is unloaded.
+  async releaseCoach(coach) { if (!live.isActive() && (!coach || modelManager.loaded === coach) && !prefs.liveCoach) await unloadLiveCoach(); },
   onHistory(record) {
     const progress = compareProgress(record, history.slice(0, 49));
     history = [record, ...history].slice(0, 50); store.saveHistory(history); chat.setHistory(history);
     return progress;
   },
 });
-chat.initChat({ prefs, profile, history, ensureLiveCoach, getLiveCoach: () => modelManager.loaded });
+chat.initChat({ prefs, profile, history, ensureLiveCoach, getLiveCoach: () => modelManager.loaded, llmState });
 
 /* ───────────── Coming back after a break opens a new chat ───────────── */
 const NEW_CHAT_AFTER_MS = 30 * 60 * 1000;
@@ -409,6 +431,7 @@ function enterApp() {
   syncProfile(); applyPreferences(); renderCatalog();
   chat.setHistory(history); chat.openFresh();
   showScreen('chat');
+  warmLiveCoach();
 }
 /* ───────────── Offline ───────────── */
 // After the first visit the app and the vision models work without a network (sw.js).

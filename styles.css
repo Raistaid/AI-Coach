@@ -160,6 +160,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .msg.me .bubble { background: var(--brand); color: #fff; border-bottom-right-radius: 8px; box-shadow: 0 3px 10px rgba(8, 102, 255, .22); }
 .msg.route, .msg.skill, .msg.summary { max-width: 94%; }
 .msg.route .bubble, .msg.skill .bubble, .msg.summary .bubble { background: var(--bg); border-radius: 24px; border-bottom-left-radius: 8px; width: 100%; padding: 16px; }
+.msg.streaming .bubble p::after { content: '▍'; margin-left: 2px; color: var(--blue-text); animation: caret 1s steps(2) infinite; }
+@keyframes caret { 50% { opacity: 0; } }
 .msg-meta { display: block; margin-top: 6px; font-size: 11px; font-weight: 600; color: var(--blue-text); }
 .msg-foot { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
 .msg-time { font-size: 11px; color: var(--muted); }
@@ -368,6 +370,12 @@ select { padding: 9px 12px; border: 0; border-radius: 12px; background: var(--su
 .live-badge { padding: 6px 10px; border-radius: 999px; background: var(--danger); font-size: 11px; font-weight: 800; letter-spacing: .6px; }
 .live-badge[data-kind="demo"], .live-badge[data-kind="file"] { background: rgba(255, 255, 255, .22); }
 .live-timer { padding: 6px 12px; border-radius: 999px; color: #fff; font-size: 13px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.skill-plate { position: absolute; top: calc(64px + var(--safe-t)); left: 12px; right: 12px; z-index: 9; padding: 12px; border-radius: 20px; background: rgba(20, 20, 24, .72); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); color: #fff; display: grid; gap: 10px; }
+.skill-plate-title { margin: 0; font-size: 13px; font-weight: 700; opacity: .8; }
+.skill-plate-list { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.skill-plate-list::-webkit-scrollbar { display: none; }
+.skill-plate-list .chip { flex: 0 0 auto; background: rgba(255, 255, 255, .14); color: #fff; border: 1.5px solid transparent; }
+.skill-plate-list .chip[aria-checked="true"] { background: #fff; color: #111; border-color: #fff; }
 .glass-btn { margin-left: auto; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: #fff; padding: 0; }
 .glass-btn .ic { width: 22px; height: 22px; stroke-width: 2.6; }
 .glass-btn.small { width: 32px; height: 32px; margin-left: 0; }

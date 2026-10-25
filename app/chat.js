@@ -6,14 +6,15 @@ import { keywordPlan, buildPlannerMessages, parsePlan, planReplyText, pluralize 
 import { $, text, el, icon, toast, haptic, bus, timeLabel, relativeDate, formatTime, rhythmNode } from './ui.js';
 import * as store from './store.js';
 import { detectIntent, looksLikeGoal, talkReply, STRONG_INTENTS } from '../coach-talk.js';
+import { llmHandles, buildChatContext, buildChatMessages, historyMessages, validateChatReply, invitesToTrain, CHAT_MAX_TOKENS } from '../coach-chat.js';
 
-const ctx = { prefs: null, profile: null, history: [], chats: [], thread: null, ensureLiveCoach: null, getLiveCoach: null, busy: false, llmHistory: [] };
+const ctx = { prefs: null, profile: null, history: [], chats: [], thread: null, ensureLiveCoach: null, getLiveCoach: null, llmState: () => ({}), busy: false, llmHistory: [] };
 const steps = (n) => pluralize(n, ['шаг', 'шага', 'шагов']);
 let stick = true;          // the list follows new messages while the person is at the bottom
 let lastSummary = null;    // where the latest live summary card lives, for the late LLM text
 
-export function initChat({ prefs, profile, history, ensureLiveCoach, getLiveCoach }) {
-  Object.assign(ctx, { prefs, profile, history, ensureLiveCoach, getLiveCoach });
+export function initChat({ prefs, profile, history, ensureLiveCoach, getLiveCoach, llmState }) {
+  Object.assign(ctx, { prefs, profile, history, ensureLiveCoach, getLiveCoach, llmState: llmState || ctx.llmState });
   ctx.chats = store.loadChats();
   const list = $('chatList');
   list.addEventListener('scroll', () => {
@@ -193,9 +194,12 @@ function renderChips() {
   }
 }
 
-/** The header names the coach's character; it follows the profile setting. */
+/** The header names the coach's character and the local model when it is running. */
 export function renderHeader() {
-  text('chatSub', `${PERSONALITIES[ctx.prefs.personality].name} тренер · ИИ на устройстве`);
+  if (!ctx.prefs) return; // the model manager may report before the chat is initialised
+  const llm = ctx.llmState() || {};
+  const tail = llm.loaded ? `${llm.label || 'модель'} на устройстве` : llm.loading ? 'модель запускается…' : 'ИИ на устройстве';
+  text('chatSub', `${PERSONALITIES[ctx.prefs.personality].name} тренер · ${tail}`);
 }
 
 export function renderDrawer() {
@@ -272,21 +276,82 @@ function talkContext() {
 
 /**
  * Order: pain, results, «как дела», help → a skill named in the message → other small talk →
- * a stated goal (may honestly get «такого навыка пока нет») → a friendly «не понял».
+ * a stated goal (may honestly get «такого навыка пока нет») → a free question.
+ * Free questions and small talk go to the local model when it is running; safety, numbers
+ * and actions (pain, results, «да»/«нет», goals) always stay with the rules.
  */
 async function respond(query) {
   const intent = detectIntent(query);
   const hasSkillWords = keywordPlan(query, SKILL_LIST).plan.length > 0;
-  if (intent && (STRONG_INTENTS.has(intent) || !hasSkillWords)) return talk(intent);
-  if (hasSkillWords || looksLikeGoal(query)) return plan(query);
-  return talk(null);
+  const goal = looksLikeGoal(query);
+  if (intent && (STRONG_INTENTS.has(intent) || !hasSkillWords)) return talk(intent, query);
+  // «Как правильно чеканить?» is a question about technique: the model answers it; without the model the route card does.
+  if (hasSkillWords && isQuestion(query) && !goal && await llmTalk(query, null)) return;
+  if (hasSkillWords || goal) return plan(query);
+  return talk(null, query);
 }
-async function talk(intent) {
+// «как правильно чеканить?» is a question about technique, not a route request.
+const isQuestion = (query) => /\?|^(как|что|почему|зачем|сколько|можно|какой|какая|какие|где|когда|нужно ли|стоит ли|правда ли)(?!\p{L})/iu.test(String(query).trim());
+
+async function talk(intent, query) {
+  if (llmHandles(intent) && await llmTalk(query, intent)) return;
   const context = talkContext();
   const reply = talkReply(intent, context, ctx.thread.messages.length);
   if (reply.action === 'start') bus.emit('gesture'); // still inside the tap: unlocks voice on iOS
-  await coachSays(reply.text, reply.offer ? { offer: true } : {});
+  const pending = ctx.prefs.liveCoach && llmHandles(intent) && !ctx.getLiveCoach() && ctx.llmState()?.loading;
+  await coachSays(reply.text, { ...(reply.offer ? { offer: true } : {}), ...(pending ? { meta: 'по правилам · живой тренер запускается' } : {}) });
   if (reply.action === 'start') bus.emit('start-live', { skillId: ctx.prefs.skill, mode: 'camera' });
+}
+
+/* ───────────── Free conversation with the local model ───────────── */
+
+const LLM_FIRST_TOKEN_MS = 20000;   // a phone that has not started answering by then falls back to the rules
+const LLM_TOTAL_MS = 45000;
+
+/** The model's reply streams into a temporary bubble; only a validated reply is stored. Returns true when it answered. */
+async function llmTalk(query, intent) {
+  const coach = ctx.prefs.liveCoach ? ctx.getLiveCoach() : null;
+  if (!coach) {
+    // Downloaded but not running yet: start it for the next message, answer by the rules now.
+    if (ctx.prefs.liveCoach && !ctx.llmState()?.loading) ctx.ensureLiveCoach().catch(() => {});
+    return false;
+  }
+  const t = talkContext();
+  const context = buildChatContext({ ...t, plan: ctx.prefs.plan, skillId: ctx.prefs.skill, query, skills: SKILL_LIST });
+  // The thread itself is the memory: the latest turns, whoever wrote them (rules, planner or model).
+  const messages = buildChatMessages(query, context, historyMessages(ctx.thread.messages.slice(0, -1)));
+  const thread = ctx.thread;
+  // cloneNode drops the like handler: the temporary bubble is not a stored message.
+  const node = messageNode({ id: 'streaming', role: 'coach', type: 'text', text: '', at: new Date().toISOString() }).cloneNode(true);
+  node.classList.add('streaming');
+  const paragraph = node.querySelector('p');
+  let shown = false;
+  const controller = new AbortController();
+  const firstToken = setTimeout(() => { if (!shown) controller.abort(); }, LLM_FIRST_TOKEN_MS);
+  const total = setTimeout(() => controller.abort(), LLM_TOTAL_MS);
+  setTyping(true);
+  let raw = null;
+  try {
+    raw = await coach.stream(messages, {
+      maxTokens: CHAT_MAX_TOKENS, temperature: 0.6, signal: controller.signal,
+      onToken(full) {
+        if (ctx.thread !== thread) return; // the person switched chats: keep generating silently, do not draw
+        if (!shown) { shown = true; setTyping(false); $('chatList').append(node); }
+        paragraph.textContent = full;
+        if (stick) scrollBottom();
+      },
+    });
+  } catch (error) { console.warn('Aimo chat: LLM failed', error?.message); }
+  finally { clearTimeout(firstToken); clearTimeout(total); setTyping(false); node.remove(); }
+  const checked = validateChatReply(raw, context, query);
+  if (!checked.ok) { console.warn('Aimo chat: LLM reply rejected,', checked.reason, intent); return false; }
+  if (ctx.thread !== thread) { // store the reply in the chat it belongs to
+    const { thread: updated } = store.appendMessage(thread, { role: 'coach', type: 'text', text: checked.text, meta: 'живой тренер · проверено' });
+    ctx.chats = store.replaceThread(ctx.chats, updated); store.saveChats(ctx.chats); renderDrawer();
+    return true;
+  }
+  push({ role: 'coach', type: 'text', text: checked.text, meta: 'живой тренер · проверено', ...(invitesToTrain(checked.text) ? { offer: true } : {}) });
+  return true;
 }
 
 const LLM_REPLY_TIMEOUT_MS = 25000;
