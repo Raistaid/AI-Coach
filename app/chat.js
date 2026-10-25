@@ -8,18 +8,36 @@ import * as store from './store.js';
 
 const ctx = { prefs: null, profile: null, history: [], chats: [], thread: null, ensureLiveCoach: null, getLiveCoach: null, busy: false, llmHistory: [] };
 const steps = (n) => pluralize(n, ['шаг', 'шага', 'шагов']);
+let stick = true;          // the list follows new messages while the person is at the bottom
+let lastSummary = null;    // where the latest live summary card lives, for the late LLM text
 
 export function initChat({ prefs, profile, history, ensureLiveCoach, getLiveCoach }) {
   Object.assign(ctx, { prefs, profile, history, ensureLiveCoach, getLiveCoach });
   ctx.chats = store.loadChats();
-  $('chatForm').addEventListener('submit', (event) => { event.preventDefault(); send($('chatInput').value); });
+  const list = $('chatList');
+  list.addEventListener('scroll', () => {
+    stick = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+    if (stick) setJump(false); else if ($('chatJump').hidden) setJump(true, false);
+  }, { passive: true });
+  // The keyboard and the typing indicator change the list height: keep the latest message in view.
+  if ('ResizeObserver' in window) new ResizeObserver(() => { if (stick) list.scrollTop = list.scrollHeight; }).observe(list);
+  $('chatJump').addEventListener('click', () => { stick = true; setJump(false); list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' }); });
+  // Tapping send or a chip must not close the keyboard while typing.
+  const keepFocus = (event) => { if (document.activeElement === $('chatInput')) event.preventDefault(); };
+  $('chatSend').addEventListener('mousedown', keepFocus);
+  $('chatChips').addEventListener('mousedown', keepFocus);
+  $('chatForm').addEventListener('submit', (event) => { event.preventDefault(); send($('chatInput').value, { fromInput: true }); });
   $('newChatBtn').addEventListener('click', () => { newThread(); haptic(); toast('Новый чат'); });
   $('drawerNew').addEventListener('click', () => { newThread(); bus.emit('drawer', false); });
   $('drawerClear').addEventListener('click', () => {
     if (!ctx.chats.length) return;
     ctx.chats = []; store.saveChats([]); openFresh(); toast('Чаты удалены');
   });
-  $('chatList').addEventListener('scroll', () => { /* keep native momentum */ }, { passive: true });
+}
+function setJump(visible, fresh = false) {
+  const button = $('chatJump'); button.hidden = !visible;
+  button.classList.toggle('has-new', visible && (fresh || button.classList.contains('has-new')));
+  if (!visible) button.classList.remove('has-new');
 }
 
 export function setProfile(profile) { ctx.profile = profile; }
@@ -70,14 +88,16 @@ function renderThread() {
     list.append(messageNode(message));
   }
   text('chatSub', `${PERSONALITIES[ctx.prefs.personality].name} тренер · ИИ на устройстве`);
-  renderChips(); scrollBottom();
+  stick = true; setJump(false); renderChips(); scrollBottom();
 }
 function appendNode(message) {
   const list = $('chatList');
   const day = relativeDate(message.at);
   const lastSep = [...list.querySelectorAll('.day-sep')].at(-1);
   if (!lastSep || lastSep.textContent !== day) list.append(el('div', 'day-sep', day));
-  list.append(messageNode(message)); renderChips(); scrollBottom();
+  list.append(messageNode(message)); renderChips();
+  // Own messages always scroll; replies only when the person is reading the bottom.
+  if (stick || message.role === 'user') { stick = true; setJump(false); scrollBottom(); } else setJump(true, true);
 }
 function scrollBottom() { const list = $('chatList'); requestAnimationFrame(() => { list.scrollTop = list.scrollHeight; }); }
 
@@ -110,7 +130,8 @@ function toggleLike(id, node) {
 function routeCard(data) {
   const plan = (data.plan || []).filter(id => SKILL_LIST.some(s => s.id === id));
   const card = el('div', 'card');
-  card.append(el('b', 'card-title', data.goal ? `Маршрут: ${data.goal}` : 'Твой маршрут'));
+  card.append(el('b', 'card-title', plan.length > 1 ? `Твой маршрут · ${plan.length} навыка` : 'Твой маршрут'));
+  if (data.goal) { const goal = data.goal.length > 60 ? `${data.goal.slice(0, 57)}…` : data.goal; card.append(el('small', 'card-goal', `по запросу «${goal}»`)); }
   const list = el('ol', 'card-steps');
   plan.forEach(id => { const s = getSkill(id); list.append(el('li', null, `${s.emoji} ${s.name} · ${steps(s.lessons.length)} · ${s.minutes} мин`)); });
   card.append(list);
@@ -203,25 +224,28 @@ export function renderDrawer() {
 /* ───────────── Conversation ───────────── */
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-function setTyping(on) { $('chatTyping').hidden = !on; if (on) scrollBottom(); }
+function setTyping(on) { $('chatTyping').hidden = !on; if (on && stick) scrollBottom(); }
 
 async function coachSays(message, extra = {}) {
   setTyping(true); await wait(350 + Math.min(900, message.length * 12)); setTyping(false);
   return push({ role: 'coach', type: 'text', text: message, ...extra });
 }
 
-export async function send(raw) {
+export async function send(raw, { fromInput = false } = {}) {
   const query = String(raw || '').trim();
   if (!query || ctx.busy) return;
   ctx.busy = true; $('chatSend').disabled = true;
-  $('chatInput').value = ''; haptic(6);
+  if (fromInput) $('chatInput').value = ''; // a chip must not wipe a half-written message
+  haptic(6);
   push({ role: 'user', type: 'text', text: query });
   const q = query.toLowerCase();
   try {
-    if (/^(покажи )?демо/.test(q)) {
+    if (/^(покажи )?демо([\s!.,]|$)/.test(q)) {
+      bus.emit('gesture'); // iOS speaks only if voice was unlocked inside the tap
       await coachSays('Запускаю демо на нарисованном спортсмене. Это симуляция интерфейса, а не анализ камеры.');
       bus.emit('start-live', { skillId: ctx.prefs.skill, mode: 'demo' });
-    } else if (/^(начать эфир|начни|поехали|старт|начать)/.test(q)) {
+    } else if (/^(начать эфир|начни|поехали|старт|начать)([\s!.,]|$)/.test(q)) {
+      bus.emit('gesture');
       const skill = getSkill(ctx.prefs.skill);
       await coachSays(`Открываю эфир: ${skill.name}. ${skill.camera}`);
       bus.emit('start-live', { skillId: skill.id, mode: 'camera' });
@@ -229,7 +253,7 @@ export async function send(raw) {
       await coachSays('Давай так: что ближе одним словом, мяч, ноги или равновесие? Или нажми на навык в кружках сверху, расскажу о нём.');
     } else if (/^(другая цель|другой навык)/.test(q)) {
       await coachSays('Напиши новую цель своими словами, соберу маршрут заново.');
-    } else if (/^(привет|здравствуй|хай|йо)/.test(q)) {
+    } else if (/^(привет|приветик|здравствуй(те)?|хай|йо|дарова|здорово|салют|hi|hello)[\s!.,)]*$/.test(q)) {
       await coachSays(`Привет, ${ctx.profile.name}! Чему хочешь научиться сегодня?`);
     } else {
       await plan(query);
@@ -237,23 +261,28 @@ export async function send(raw) {
   } finally { ctx.busy = false; $('chatSend').disabled = false; }
 }
 
+const LLM_REPLY_TIMEOUT_MS = 25000;
 async function plan(query) {
   setTyping(true);
-  let result = null;
-  if (ctx.prefs.liveCoach) {
+  let result = null; let note = '';
+  const coach = ctx.prefs.liveCoach ? ctx.getLiveCoach() : null;
+  if (coach) {
     try {
-      const coach = await ctx.ensureLiveCoach();
-      const raw = await coach.chat(buildPlannerMessages(query, SKILL_LIST, ctx.llmHistory), { maxTokens: 220 });
+      // A slow phone must not leave the chat hanging: past the timeout the keyword planner answers.
+      const raw = await Promise.race([coach.chat(buildPlannerMessages(query, SKILL_LIST, ctx.llmHistory), { maxTokens: 220 }), wait(LLM_REPLY_TIMEOUT_MS).then(() => null)]);
       const parsed = parsePlan(raw, SKILL_LIST);
-      if (parsed.ok) result = parsed; else console.warn('Aimo planner: LLM reply rejected,', parsed.reason);
+      if (parsed.ok) result = parsed; else { note = 'живой тренер не дал проверяемый ответ'; console.warn('Aimo planner: LLM reply rejected,', parsed.reason); }
     } catch (error) { console.warn('Aimo planner: LLM unavailable', error?.message); }
+  } else if (ctx.prefs.liveCoach) {
+    // The model is still downloading: answer now, keep loading in the background.
+    note = 'живой тренер ещё загружается'; ctx.ensureLiveCoach().catch(() => {}); await wait(450);
   } else await wait(500);
   const viaLlm = Boolean(result);
   if (!result) result = keywordPlan(query, SKILL_LIST);
   const reply = result.reply || planReplyText(result.plan, SKILL_LIST);
   ctx.llmHistory.push({ role: 'user', content: query }, { role: 'assistant', content: reply });
   setTyping(false);
-  push({ role: 'coach', type: 'text', text: reply, meta: viaLlm ? 'живой тренер · проверено по каталогу' : ctx.prefs.liveCoach ? 'подбор по ключевым словам' : '' });
+  push({ role: 'coach', type: 'text', text: reply, meta: viaLlm ? 'живой тренер · проверено по каталогу' : note ? `подбор по ключевым словам · ${note}` : '' });
   if (result.plan.length) {
     ctx.prefs.plan = result.plan; ctx.prefs.planGoal = query; ctx.prefs.skill = result.plan[0]; store.savePrefs(ctx.prefs);
     push({ role: 'coach', type: 'route', data: { plan: result.plan, goal: query }, skill: result.plan[0] });
@@ -270,7 +299,23 @@ export async function introduceSkill(skillId) {
 
 /** Called when a live session ends. */
 export function postSummary(data) {
-  push({ role: 'system', type: 'text', text: `${data.demo ? 'Демо' : 'Эфир'} завершён · ${formatTime(data.seconds || 0)}` });
-  push({ role: 'coach', type: 'summary', data, skill: data.skillId });
+  push({ role: 'system', type: 'text', text: `${data.demo ? 'Демо завершено' : 'Эфир завершён'} · ${formatTime(data.seconds || 0)}` });
+  const message = push({ role: 'coach', type: 'summary', data, skill: data.skillId });
+  stick = true; scrollBottom();
+  lastSummary = { threadId: ctx.thread.id, messageId: message.id };
+}
+
+/** The live coach's final review arrives a few seconds after the summary card: add it there. */
+export function attachLiveText(liveText) {
+  if (!lastSummary || !liveText) return;
+  const { threadId, messageId } = lastSummary;
+  const thread = ctx.chats.find(t => t.id === threadId); if (!thread) return;
+  const updated = { ...thread, messages: thread.messages.map(m => (m.id === messageId ? { ...m, data: { ...m.data, live: liveText } } : m)) };
+  ctx.chats = ctx.chats.map(t => (t.id === threadId ? updated : t)); store.saveChats(ctx.chats);
+  if (ctx.thread?.id !== threadId) return;
+  ctx.thread = updated;
+  const node = $('chatList').querySelector(`[data-id="${messageId}"]`);
+  node?.replaceWith(messageNode(updated.messages.find(m => m.id === messageId)));
+  if (stick) scrollBottom();
 }
 export function postSystem(message) { push({ role: 'system', type: 'text', text: message }); }

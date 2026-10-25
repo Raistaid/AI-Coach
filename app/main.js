@@ -10,6 +10,7 @@ import * as chat from './chat.js';
 import * as live from './live.js';
 import { createModelManager } from './model-manager.js';
 import { russianVoices, voiceKey, configureUtterance } from './speech.js';
+import { initViewport } from './viewport.js';
 
 store.migrateLegacyKeys();
 const app = $('app');
@@ -22,8 +23,25 @@ let liveStartRequest = 0;
 let sheetSkillId = null;
 const steps = (n) => pluralize(n, ['шаг', 'шага', 'шагов']);
 
+/* ───────────── Viewport & keyboard ───────────── */
+initViewport({
+  onChange({ keyboard }) {
+    const value = keyboard ? 'open' : 'closed';
+    if (app.dataset.keyboard !== value) { app.dataset.keyboard = value; bus.emit('keyboard', keyboard); }
+  },
+});
+
 /* ───────────── Theme ───────────── */
-function applyTheme() { document.documentElement.dataset.theme = prefs.theme; $('themeSelect').value = prefs.theme; }
+const themeMetas = [...document.querySelectorAll('meta[name="theme-color"]')];
+function applyTheme() {
+  document.documentElement.dataset.theme = prefs.theme; $('themeSelect').value = prefs.theme;
+  // The browser bar follows the chosen theme, not only the system one.
+  for (const meta of themeMetas) {
+    const systemDark = (meta.getAttribute('media') || '').includes('dark');
+    const dark = prefs.theme === 'system' ? systemDark : prefs.theme === 'dark';
+    meta.setAttribute('content', dark ? '#000000' : '#ffffff');
+  }
+}
 
 /* ───────────── Screens & tabs ───────────── */
 function showScreen(name) {
@@ -32,11 +50,13 @@ function showScreen(name) {
   if (name === 'progress') renderProgress();
   if (name === 'profile') { renderProfile(); modelManager.refresh(); }
   if (name === 'catalog') renderCatalog();
-  window.scrollTo({ top: 0 });
+  if (name !== 'chat') document.querySelector(`.screen-${name}`)?.scrollTo({ top: 0 });
+  if (drawerOpen) setDrawer(false, { focus: false });
 }
 document.querySelectorAll('.tab[data-tab]').forEach(tab => tab.addEventListener('click', () => {
   haptic(6);
   if (tab.dataset.tab === 'live') { openSkillSheet(prefs.skill); return; }
+  if (tab.dataset.tab === app.dataset.screen) { document.querySelector(`.screen-${app.dataset.screen === 'chat' ? 'chat .chat-list' : app.dataset.screen}`)?.scrollTo({ top: app.dataset.screen === 'chat' ? 1e9 : 0, behavior: 'smooth' }); return; }
   showScreen(tab.dataset.tab);
 }));
 
@@ -63,36 +83,69 @@ $('logoutBtn').addEventListener('click', () => {
   toast('Ты вышел. Чаты и история остались на этом устройстве.');
 });
 
-/* ───────────── Drawer (chat history, swipe from the left edge) ───────────── */
+/* ───────────── Drawer: chat history, swipe right anywhere on the chat ───────────── */
+const drawerEl = $('drawer');
+const backdropEl = $('drawerBackdrop');
 let drawerOpen = false;
-function setDrawer(open) {
+function setDrawer(open, { focus = true } = {}) {
+  const changed = open !== drawerOpen;
   drawerOpen = open; app.dataset.drawer = open ? 'open' : 'closed';
-  $('drawer').hidden = !open; $('drawerBackdrop').hidden = !open; $('openDrawer').setAttribute('aria-expanded', String(open));
-  if (open) { chat.renderDrawer(); $('closeDrawer').focus({ preventScroll: true }); } else $('openDrawer').focus({ preventScroll: true });
+  drawerEl.inert = !open; $('openDrawer').setAttribute('aria-expanded', String(open));
+  if (open) chat.renderDrawer();
+  if (changed && focus) (open ? $('closeDrawer') : $('openDrawer')).focus({ preventScroll: true });
 }
-bus.on('drawer', setDrawer);
+setDrawer(false, { focus: false });
+bus.on('drawer', (open) => setDrawer(open));
 $('openDrawer').addEventListener('click', () => setDrawer(true));
 $('closeDrawer').addEventListener('click', () => setDrawer(false));
-$('drawerBackdrop').addEventListener('click', () => setDrawer(false));
+backdropEl.addEventListener('click', () => setDrawer(false));
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   if (currentSheet()) { closeSheet(); event.preventDefault(); return; }
   if (drawerOpen) { setDrawer(false); event.preventDefault(); }
 });
-let swipe = null;
+
+// The panel follows the finger. Opening starts anywhere on the chat except rows that
+// scroll sideways (stories, chips) and the composer, which also keeps clear of the
+// iOS back gesture at the very edge of the screen.
+const NO_SWIPE = '.stories, .chips, .composer, input, select, textarea';
+let drag = null;
 document.addEventListener('touchstart', (event) => {
-  if (!profile || live.isActive() || currentSheet()) return;
-  const touch = event.touches[0];
-  if ((!drawerOpen && touch.clientX <= 28 && app.dataset.screen === 'chat') || drawerOpen) swipe = { x: touch.clientX, y: touch.clientY, t: performance.now() };
+  if (!profile || live.isActive() || currentSheet() || event.touches.length !== 1) { drag = null; return; }
+  const target = event.target instanceof Element ? event.target : null;
+  if (!target) return;
+  const fromChat = !drawerOpen && app.dataset.screen === 'chat' && target.closest('.screen-chat') && !target.closest(NO_SWIPE);
+  const fromDrawer = drawerOpen && (target.closest('#drawer') || target === backdropEl);
+  if (!fromChat && !fromDrawer) { drag = null; return; }
+  const touch = event.touches[0]; const now = performance.now();
+  drag = { x: touch.clientX, y: touch.clientY, open: drawerOpen, axis: null, progress: drawerOpen ? 1 : 0, lastX: touch.clientX, lastT: now, velocity: 0 };
 }, { passive: true });
-document.addEventListener('touchend', (event) => {
-  if (!swipe) return;
-  const touch = event.changedTouches[0]; const dx = touch.clientX - swipe.x; const dy = Math.abs(touch.clientY - swipe.y);
-  const quick = performance.now() - swipe.t < 700; swipe = null;
-  if (dy > 80 || !quick) return;
-  if (!drawerOpen && dx > 60) { setDrawer(true); haptic(8); }
-  else if (drawerOpen && dx < -60) { setDrawer(false); haptic(8); }
+document.addEventListener('touchmove', (event) => {
+  if (!drag) return;
+  const touch = event.touches[0]; const dx = touch.clientX - drag.x; const dy = touch.clientY - drag.y;
+  if (!drag.axis) {
+    if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+    const sideways = Math.abs(dx) > Math.abs(dy) * 1.3 && (drag.open ? dx < 0 : dx > 0);
+    if (!sideways) { drag = null; return; }
+    drag.axis = 'x'; app.classList.add('drawer-dragging'); if (!drag.open) chat.renderDrawer();
+  }
+  const now = performance.now();
+  drag.velocity = (touch.clientX - drag.lastX) / Math.max(1, now - drag.lastT); drag.lastX = touch.clientX; drag.lastT = now;
+  const width = drawerEl.offsetWidth || 300;
+  drag.progress = Math.min(1, Math.max(0, (drag.open ? 1 : 0) + dx / width));
+  drawerEl.style.transform = `translateX(${((drag.progress - 1) * 100).toFixed(2)}%)`;
+  backdropEl.style.opacity = drag.progress.toFixed(3);
 }, { passive: true });
+function endDrag() {
+  const finished = drag; drag = null;
+  if (!finished || finished.axis !== 'x') return;
+  const open = finished.velocity > 0.45 ? true : finished.velocity < -0.45 ? false : finished.progress > 0.4;
+  app.classList.remove('drawer-dragging'); drawerEl.style.transform = ''; backdropEl.style.opacity = '';
+  if (open !== drawerOpen) haptic(8);
+  setDrawer(open, { focus: false });
+}
+document.addEventListener('touchend', endDrag, { passive: true });
+document.addEventListener('touchcancel', endDrag, { passive: true });
 document.addEventListener('keydown', (event) => { if (event.key === '[' && profile && !live.isActive() && (event.metaKey || event.ctrlKey)) { event.preventDefault(); setDrawer(!drawerOpen); } });
 
 /* ───────────── Catalog & skill sheet ───────────── */
@@ -261,7 +314,11 @@ async function startSession(options) {
   live.startLive(options);
 }
 bus.on('start-live', startSession);
-bus.on('live-started', ({ skillId, mode }) => chat.postSystem(`${mode === 'demo' ? 'Демо' : 'Эфир'} начат · ${getSkill(skillId).name}`));
+bus.on('gesture', () => { live.unlockSpeech(); live.ensureAudio(); });
+bus.on('live-final-text', data => chat.attachLiveText(data.live));
+bus.on('live-failed', () => chat.postSystem('Эфир не запустился'));
+bus.on('live-cancelled', () => chat.postSystem('Эфир отменён'));
+bus.on('live-started', ({ skillId, mode }) => chat.postSystem(`${mode === 'demo' ? 'Демо начато' : mode === 'file' ? 'Разбор видео начат' : 'Эфир начат'} · ${getSkill(skillId).name}`));
 bus.on('live-finished', (data) => { chat.postSummary(data); if (app.dataset.screen === 'progress') renderProgress(); chat.setHistory(history); renderModels(); });
 live.initLive({
   prefs, profile, ensureLiveCoach, getLiveCoach: () => modelManager.loaded,
@@ -273,6 +330,17 @@ live.initLive({
   },
 });
 chat.initChat({ prefs, profile, history, ensureLiveCoach, getLiveCoach: () => modelManager.loaded });
+
+/* ───────────── Coming back after a break opens a new chat ───────────── */
+const NEW_CHAT_AFTER_MS = 30 * 60 * 1000;
+let hiddenAt = 0;
+function comeBack() {
+  const away = hiddenAt ? Date.now() - hiddenAt : 0; hiddenAt = 0;
+  if (!profile || live.isActive() || away < NEW_CHAT_AFTER_MS) return;
+  closeSheet(); setDrawer(false, { focus: false }); chat.openFresh(); showScreen('chat');
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) hiddenAt = Date.now(); else comeBack(); });
+window.addEventListener('pageshow', (event) => { if (event.persisted) comeBack(); });
 
 /* ───────────── Enter ───────────── */
 function enterApp() {

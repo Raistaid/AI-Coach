@@ -35,7 +35,7 @@ const EARCONS = { success: [[660, 0, .08], [880, .09, .14]], lesson: [[523, 0, .
 
 const ctx = { prefs: null, profile: null, ensureLiveCoach: null, getLiveCoach: null, onHistory: null };
 let video, overlay, demoCanvas, stage;
-let state = 'idle'; let mode = 'camera'; let source = 'camera'; let facingMode = 'environment';
+let state = 'idle'; let mode = 'camera'; let source = 'camera'; let facingMode = 'user';
 let stream = null; let engine = null; let enginePromise = null; let generation = 0; let raf = 0;
 let elapsedMs = 0; let lastTick = 0; let lastAnalysis = 0; let lastVideoTime = -1; let cues = [];
 let objectUrl = null; let wakeLock = null; let sessionSkill = 'football'; let lastResult = null;
@@ -46,6 +46,7 @@ let voiceQuestion = null; let questionBusy = false; let questionSerial = 0;
 
 export function initLive({ prefs, profile, ensureLiveCoach, getLiveCoach, onHistory, releaseCoach }) {
   Object.assign(ctx, { prefs, profile, ensureLiveCoach, getLiveCoach, onHistory, releaseCoach });
+  facingMode = prefs.facing;
   video = $('cameraVideo'); overlay = $('poseCanvas'); demoCanvas = $('demoCanvas'); stage = $('stage');
   $('liveClose').addEventListener('click', () => stopSession());
   $('livePause').addEventListener('click', togglePause);
@@ -90,6 +91,8 @@ export function initLive({ prefs, profile, ensureLiveCoach, getLiveCoach, onHist
     const pending = enginePromise; cancelRun(); engine = null; enginePromise = null;
     pending?.then(value => { value.close(); if (engine === value) engine = null; }).catch(() => {});
   });
+  // Back from the browser cache: the camera and models were released on pagehide.
+  window.addEventListener('pageshow', (event) => { if (event.persisted && state !== 'idle') { hideLive(); toast('Эфир остановлен, пока страница была скрыта'); } });
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape' || event.defaultPrevented) return;
     if (!$('liveQuestionPanel').hidden) { closeQuestion(); event.preventDefault(); return; }
@@ -108,7 +111,7 @@ export function applyPrefs() {
   $('liveVoice').setAttribute('aria-pressed', String(ctx.prefs.voice));
   $('liveSkeleton').setAttribute('aria-pressed', String(ctx.prefs.skeleton));
   if (overlay) overlay.style.opacity = '1';
-  const mirror = ctx.prefs.mirror && source === 'camera' && mode !== 'demo';
+  const mirror = ctx.prefs.mirror && source === 'camera' && mode !== 'demo' && facingMode === 'user';
   if (video) video.style.transform = mirror ? 'scaleX(-1)' : '';
   if (overlay) overlay.style.transform = mirror ? 'scaleX(-1)' : '';
   renderFar();
@@ -188,7 +191,7 @@ function beginLive(run) {
   setState('live'); lastTick = performance.now();
   text('stageHint', mode === 'demo' ? 'Симуляция · не анализ камеры' : 'Встань так, чтобы были видны обе стопы и плечи');
   if (mode !== 'demo' && ctx.prefs.liveCoach) ctx.ensureLiveCoach().catch(() => {});
-  if (navigator.wakeLock && mode !== 'demo') navigator.wakeLock.request('screen').then(lock => { if (generation === run) wakeLock = lock; else lock.release(); }).catch(() => {});
+  keepAwake(run);
   renderLesson(mode === 'demo' ? describeLesson(demo.session) : engine ? describeLesson(engine.session) : null);
   raf = requestAnimationFrame(t => tick(t, run));
 }
@@ -197,6 +200,7 @@ function showError(error) {
   const messages = { NotAllowedError: 'Доступ к камере не разрешён. Разреши камеру в настройках сайта или попробуй демо.', NotFoundError: 'Камера не найдена. Подключи камеру или открой видеофайл.', NotReadableError: 'Камера занята другим приложением. Закрой его и попробуй снова.' };
   const message = messages[error.name] || (error.message?.includes('HTTPS') ? error.message : 'Не удалось подготовить эфир. Проверь интернет и доступ к камере. Можно открыть демо.');
   text('liveErrorText', message); $('liveError').hidden = false;
+  bus.emit('live-failed', message);
   console.warn('Aimo session:', error.name, error.message);
 }
 function releaseMedia() {
@@ -230,7 +234,8 @@ async function flipCamera() {
     const media = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: facingMode }, width: { ideal: 720 }, height: { ideal: 1280 } } });
     if (run !== generation) { media.getTracks().forEach(t => t.stop()); return; }
     stream = media; video.srcObject = media; await video.play(); if (run !== generation) return;
-    lastVideoTime = -1; applyPrefs(); beginLive(run); toast('Камера переключена');
+    ctx.prefs.facing = facingMode; store.savePrefs(ctx.prefs);
+    lastVideoTime = -1; applyPrefs(); beginLive(run); toast(facingMode === 'user' ? 'Фронтальная камера' : 'Задняя камера');
   } catch (error) { facingMode = previous; if (run === generation) showError(error); }
 }
 async function togglePause() {
@@ -245,6 +250,7 @@ async function togglePause() {
     if (mode !== 'demo') { try { await video.play(); } catch (error) { showError(error); return; } }
     if (state !== 'paused') return;
     setState('live'); lastTick = performance.now(); raf = requestAnimationFrame(t => tick(t, generation));
+    keepAwake(generation); // the system drops the wake lock while the page is hidden
     text('stageHint', mode === 'demo' ? 'Симуляция · не анализ камеры' : 'Продолжаем · двигайся в своём темпе');
   }
 }
@@ -336,8 +342,14 @@ function speak(message, kind = 'tip', force = false) {
   const utterance = configureUtterance(new SpeechSynthesisUtterance(message), ctx.prefs, p, speechSynthesis.getVoices());
   speechSynthesis.speak(utterance);
 }
+function keepAwake(run) {
+  if (!navigator.wakeLock || mode === 'demo' || (wakeLock && !wakeLock.released)) return;
+  navigator.wakeLock.request('screen').then(lock => { if (generation === run) wakeLock = lock; else lock.release(); }).catch(() => {});
+}
+let speechUnlocked = false;
 export function unlockSpeech() {
-  if (!('speechSynthesis' in window)) return;
+  if (!('speechSynthesis' in window) || speechUnlocked) return;
+  speechUnlocked = true;
   try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; u.lang = 'ru-RU'; speechSynthesis.speak(u); speechSynthesis.getVoices(); } catch { /* optional */ }
 }
 export function ensureAudio() {
@@ -477,6 +489,7 @@ function maybeAskLiveCoach() {
 
 function stopSession() {
   const wasActive = ['live', 'paused'].includes(state);
+  const wasLoading = state === 'loading';
   const wasDemo = mode === 'demo';
   const skill = getSkill(sessionSkill);
   const metrics = lastResult?.metrics || {};
@@ -487,7 +500,7 @@ function stopSession() {
   const metricKey = skill.id === 'football' ? (useTouches ? 'touches' : 'lifts') : skill.metric.key;
   const record = { schemaVersion: 2, source: wasDemo ? 'demo' : source, metricKey, date: new Date().toISOString(), goal: skill.goal, skill: sessionSkill, seconds: Math.floor(elapsedMs / 1000), metricValue: metricValue || 0, metricLabel, lessonsDone: metrics.lessonsDone || 0, lessonsTotal: skill.lessons.length, bestStreak: metrics.bestStreak || 0, cues: cues.length };
   hideLive();
-  if (!wasActive) return;
+  if (!wasActive) { if (wasLoading) bus.emit('live-cancelled'); return; }
   const progress = !wasDemo && record.seconds > 0 ? ctx.onHistory(record) : null;
   const done = record.lessonsDone;
   const lastLesson = skill.lessons[Math.min(done, skill.lessons.length) - 1];
@@ -498,7 +511,7 @@ function stopSession() {
     skillId: sessionSkill, skillName: skill.name, demo: wasDemo, source: record.source, progress: progress?.text || '', seconds: record.seconds, metricValue: record.metricValue, metricLabel, lessonsDone: done, lessonsTotal: skill.lessons.length, bestStreak: record.bestStreak,
     done: done ? `выполнено ${done} из ${skill.lessons.length}${lastLesson ? `, последний «${lastLesson.title}»` : ''}${record.bestStreak ? `, лучшая серия ${record.bestStreak}` : ''}.` : 'шаги урока пока не засчитаны, это нормально для первого раза.',
     mistake: mistake && mistakeAdvice[mistake.tag] ? `${mistakeAdvice[mistake.tag][0].toLowerCase()} (${mistake.count} раз).` : mistake ? `${(cueLabels[mistake.tag] || mistake.tag).toLowerCase()} (${mistake.count} раз).` : 'явных ошибок тренер не заметил.',
-    next: planNext ? `следующий навык по маршруту «${getSkill(planNext).name}».` : nextLesson ? `${nextLesson.title.toLowerCase()}: ${nextLesson.goal.toLowerCase()}.` : mistake && mistakeAdvice[mistake.tag] ? mistakeAdvice[mistake.tag][1] : 'повтори урок и попробуй увеличить серию.',
+    next: planNext ? `следующий навык по маршруту «${getSkill(planNext).name}».` : nextLesson ? `«${nextLesson.title}», ${nextLesson.goal.toLowerCase()}.` : mistake && mistakeAdvice[mistake.tag] ? mistakeAdvice[mistake.tag][1] : 'повтори урок и попробуй увеличить серию.',
     live: '',
   };
   text('summaryTitle', wasDemo ? 'Демо завершено' : done >= skill.lessons.length ? 'Урок пройден целиком' : done > 0 ? 'Хорошая работа' : 'Начало положено');

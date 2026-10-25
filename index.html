@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
   <meta name="description" content="Aimo — нейро-тренер в прямом эфире: чат с тренером, вертикальный эфир с камеры, распознавание позы и мяча на устройстве.">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Aimo</title>
@@ -41,11 +42,12 @@
     <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol>
     <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14M3 10h4M3 14h4M17 10h4M17 14h4"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14m-6-6 6 6 6-6"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
   </defs>
 </svg>
 
-<div id="app" class="app" data-screen="login" data-live="off" data-drawer="closed">
+<div id="app" class="app" data-screen="login" data-live="off" data-drawer="closed" data-keyboard="closed">
 
   <section class="screen screen-login" data-screen="login" aria-label="Вход">
     <form id="loginForm" class="login-card" autocomplete="off">
@@ -58,8 +60,8 @@
     </form>
   </section>
 
-  <button id="drawerBackdrop" class="drawer-backdrop" aria-label="Закрыть панель чатов" tabindex="-1" hidden></button>
-  <aside id="drawer" class="drawer" aria-label="История чатов" hidden>
+  <button id="drawerBackdrop" class="drawer-backdrop" aria-label="Закрыть панель чатов" tabindex="-1"></button>
+  <aside id="drawer" class="drawer" aria-label="История чатов">
     <div class="drawer-head"><h2>Чаты</h2><button id="closeDrawer" class="icon-btn" aria-label="Закрыть"><svg class="ic"><use href="#i-x"/></svg></button></div>
     <button id="drawerNew" class="drawer-new"><svg class="ic"><use href="#i-edit"/></svg> Новый чат</button>
     <div id="drawerList" class="drawer-list"></div>
@@ -76,11 +78,11 @@
       <button id="newChatBtn" class="icon-btn" aria-label="Новый чат"><svg class="ic"><use href="#i-edit"/></svg></button>
     </header>
     <div id="storiesRow" class="stories" aria-label="Навыки"></div>
-    <div id="chatList" class="chat-list"></div>
+    <div class="chat-wrap"><div id="chatList" class="chat-list"></div><button id="chatJump" class="jump-btn" type="button" aria-label="К последним сообщениям" hidden><svg class="ic"><use href="#i-down"/></svg></button></div>
     <div id="chatTyping" class="typing" hidden><span></span><span></span><span></span></div>
     <div id="chatChips" class="chips"></div>
     <form id="chatForm" class="composer">
-      <input id="chatInput" maxlength="200" placeholder="Напиши тренеру…" autocomplete="off" aria-label="Сообщение тренеру">
+      <input id="chatInput" maxlength="200" placeholder="Напиши тренеру…" autocomplete="off" autocapitalize="sentences" enterkeyhint="send" aria-label="Сообщение тренеру">
       <button id="chatSend" type="submit" class="send-btn" aria-label="Отправить"><svg class="ic"><use href="#i-send"/></svg></button>
     </form>
   </section>

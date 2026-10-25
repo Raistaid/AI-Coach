@@ -57,7 +57,8 @@ export function greeting(name, hour = new Date().getHours()) {
 
 /* ───────────── Preferences ───────────── */
 
-const DEFAULT_PREFS = { voice: true, voiceId: '', skeleton: true, mirror: false, objects: true, sound: true, autoFar: true, liveCoach: false, llmModel: 'default', skill: 'football', personality: 'calm', plan: [], planGoal: '', theme: 'system' };
+// Front camera by default; retain local voice/object settings.
+const DEFAULT_PREFS = { voice: true, voiceId: '', skeleton: true, mirror: true, objects: true, sound: true, autoFar: true, liveCoach: false, llmModel: 'default', skill: 'football', personality: 'calm', plan: [], planGoal: '', theme: 'system', facing: 'user' };
 
 export function sanitizePrefs(raw) {
   const prefs = { ...DEFAULT_PREFS, ...(raw && typeof raw === 'object' ? raw : {}) };
@@ -67,6 +68,7 @@ export function sanitizePrefs(raw) {
   prefs.plan = Array.isArray(prefs.plan) ? prefs.plan.filter(id => SKILL_LIST.some(s => s.id === id)).slice(0, 3) : [];
   prefs.planGoal = typeof prefs.planGoal === 'string' ? prefs.planGoal.slice(0, 200) : '';
   if (!['system', 'light', 'dark'].includes(prefs.theme)) prefs.theme = 'system';
+  if (!['user', 'environment'].includes(prefs.facing)) prefs.facing = 'user';
   prefs.voiceId = typeof prefs.voiceId === 'string' ? prefs.voiceId.slice(0, 300) : '';
   if (typeof raw?.objects !== 'boolean' && typeof raw?.ball === 'boolean') prefs.objects = raw.ball;
   delete prefs.ball;
@@ -126,9 +128,11 @@ export function isFresh(thread) {
 export function freshThread(chats, greetingText, options = {}) {
   const list = Array.isArray(chats) ? chats : [];
   if (list[0] && isFresh(list[0])) {
-    const reused = { ...list[0], messages: list[0].messages.map(m => ({ ...m })) };
+    // Same untouched chat, but it greets as of now: no stale «вчера» above a new greeting.
+    const now = options.now || new Date().toISOString();
+    const reused = { ...list[0], createdAt: now, updatedAt: now, messages: list[0].messages.map(m => ({ ...m })) };
     const greet = reused.messages.find(m => m.role === 'coach' && m.type === 'text');
-    if (greet && greetingText) greet.text = greetingText;
+    if (greet && greetingText) { greet.text = greetingText; greet.at = now; }
     return { chats: [reused, ...list.slice(1)], thread: reused };
   }
   const thread = createThread(greetingText, options);
