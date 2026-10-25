@@ -4,7 +4,7 @@ import path from 'node:path';
 
 const root = process.cwd();
 const dist = path.join(root, 'dist');
-const files = ['index.html', 'styles.css', 'coach-engine.js', 'coach-motion.js', 'coach-policy.js', 'coach-llm.js', 'coach-planner.js', 'coach-talk.js', 'coach-progress.js', 'coach-objects.js', 'coach-questions.js', 'rhythm.js', 'llm-worker.js', 'sw.js'];
+const files = ['index.html', 'styles.css', 'app-icon.svg', 'app-icon-180.png', 'app-icon-192.png', 'app-icon-512.png', 'manifest.webmanifest', 'coach-engine.js', 'coach-motion.js', 'coach-policy.js', 'coach-llm.js', 'coach-planner.js', 'coach-talk.js', 'coach-progress.js', 'coach-objects.js', 'coach-questions.js', 'rhythm.js', 'llm-worker.js', 'sw.js'];
 const dirs = ['app', 'skills'];
 
 await rm(dist, { recursive: true, force: true });
