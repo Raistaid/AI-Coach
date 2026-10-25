@@ -106,7 +106,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 /* ───────── Login ───────── */
 .screen-login { align-items: center; padding: 24px; background: radial-gradient(900px 520px at 50% -12%, var(--blue-soft), transparent 70%), var(--bg2); }
 .login-card { width: 100%; max-width: 360px; margin: auto; display: flex; flex-direction: column; gap: 14px; padding: 30px 22px 22px; border-radius: 30px; background: var(--bg); box-shadow: var(--shadow-2); text-align: center; }
-.logo-mark { align-self: center; width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; background: var(--brand); color: #fff; font-size: 38px; font-weight: 800; line-height: 1; padding-bottom: 6px; box-shadow: var(--shadow-blue); }
+.logo-mark { align-self: center; display: block; width: 64px; height: 64px; border-radius: 20px; object-fit: cover; box-shadow: var(--shadow-blue); }
 .logo { margin: 2px 0 0; font-size: 46px; font-weight: 800; letter-spacing: -2px; line-height: 1; color: var(--blue-text); }
 .login-tagline { margin: -4px 0 8px; color: var(--muted); }
 .field { display: flex; flex-direction: column; gap: 6px; text-align: left; }
@@ -210,7 +210,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 /* ───────── Login ───────── */
 .screen-login { align-items: center; padding: 24px; background: radial-gradient(900px 520px at 50% -12%, var(--blue-soft), transparent 70%), var(--bg2); }
 .login-card { width: 100%; max-width: 360px; margin: auto; display: flex; flex-direction: column; gap: 14px; padding: 30px 22px 22px; border-radius: 30px; background: var(--bg); box-shadow: var(--shadow-2); text-align: center; }
-.logo-mark { align-self: center; width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; background: var(--brand); color: #fff; font-size: 38px; font-weight: 800; line-height: 1; padding-bottom: 6px; box-shadow: var(--shadow-blue); }
+.logo-mark { align-self: center; display: block; width: 64px; height: 64px; border-radius: 20px; object-fit: cover; box-shadow: var(--shadow-blue); }
 .logo { margin: 2px 0 0; font-size: 46px; font-weight: 800; letter-spacing: -2px; line-height: 1; color: var(--blue-text); }
 .login-tagline { margin: -4px 0 8px; color: var(--muted); }
 .field { display: flex; flex-direction: column; gap: 6px; text-align: left; }

@@ -10,9 +10,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Aimo</title>
-  <link rel="icon" type="image/svg+xml" href="./app-icon.svg">
-  <link rel="apple-touch-icon" href="./app-icon-180.png">
-  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="32x32" href="./app-icon-32.png?v=4">
+  <link rel="apple-touch-icon" sizes="180x180" href="./app-icon-180.png?v=4">
+  <link rel="manifest" href="./manifest.webmanifest?v=4">
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
@@ -59,7 +59,7 @@
 
   <section class="screen screen-login" data-screen="login" aria-label="Вход">
     <form id="loginForm" class="login-card" autocomplete="off" novalidate>
-      <div class="logo-mark" aria-hidden="true">a</div>
+      <img class="logo-mark" src="./app-icon-192.png?v=4" width="64" height="64" alt="">
       <h1 class="logo">aimo</h1>
       <p class="login-tagline">Нейро-тренер в прямом эфире</p>
       <label class="field"><span>Как тебя зовут?</span><input id="loginName" maxlength="24" placeholder="Имя" required autocomplete="given-name"></label>
