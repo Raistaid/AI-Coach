@@ -8,6 +8,7 @@ import * as store from './store.js';
 import * as chat from './chat.js';
 import * as live from './live.js';
 import { initViewport } from './viewport.js';
+import { metricPhrase } from '../coach-talk.js';
 
 store.migrateLegacyKeys();
 const app = $('app');
@@ -34,7 +35,7 @@ function applyTheme() {
   for (const meta of themeMetas) {
     const systemDark = (meta.getAttribute('media') || '').includes('dark');
     const dark = prefs.theme === 'system' ? systemDark : prefs.theme === 'dark';
-    meta.setAttribute('content', dark ? '#000000' : '#ffffff');
+    meta.setAttribute('content', dark ? '#242526' : '#ffffff');
   }
 }
 
@@ -185,7 +186,7 @@ function renderProgress() {
     const row = el('div', 'history-row');
     row.append(el('span', 'skill-emoji', skill.emoji));
     const copy = el('div');
-    copy.append(el('b', null, skill.name), el('small', null, [relativeDate(session.date), formatTime(session.seconds), `${session.metricValue ?? 0} ${session.metricLabel || ''}`, `шагов ${session.lessonsDone}/${session.lessonsTotal}`, session.bestStreak ? `серия ${session.bestStreak}` : ''].filter(Boolean).join(' · ')));
+    copy.append(el('b', null, skill.name), el('small', null, [relativeDate(session.date), formatTime(session.seconds), metricPhrase(session.metricValue ?? 0, session.metricLabel || ''), `шагов ${session.lessonsDone}/${session.lessonsTotal}`, session.bestStreak ? `серия ${session.bestStreak}` : ''].filter(Boolean).join(' · ')));
     row.append(copy); list.append(row);
   }
 }
