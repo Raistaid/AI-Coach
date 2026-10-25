@@ -8,6 +8,9 @@ import { nextInPlan } from '../coach-planner.js';
 import { $, text, el, toast, haptic, bus, formatTime, openSheet, closeSheet, paintAvatar, rhythmNode } from './ui.js';
 import { rhythmStats, rhythmText } from '../rhythm.js';
 import * as store from './store.js';
+import { createVoiceQuestion } from './speech.js';
+import { trainerAudio } from './trainer-audio.js';
+import { cleanQuestion, answerTrainingQuestion, buildQuestionMessages, validateQuestionReply } from '../coach-questions.js';
 
 const cueLabels = {
   'no-person': 'Камера', 'show-feet': 'Положение в кадре', 'lesson-intro': 'Шаг урока', 'lesson-complete': 'Шаг выполнен', 'course-complete': 'Урок пройден',
@@ -15,6 +18,7 @@ const cueLabels = {
   'arms-closed': 'Руки', 'ball-side': 'Направление удара', 'ball-missing': 'Мяч', 'lift-done': 'Подъём стопы', start: 'Начало',
   'squat-complete': 'Повтор', 'squat-torso': 'Положение корпуса', 'squat-rise': 'Движение', 'squat-camera': 'Ракурс',
   'balance-align': 'Равновесие', 'balance-hold': 'Баланс', 'balance-start': 'Начало', live: 'Живой тренер',
+  question: 'Ответ на вопрос',
 };
 const mistakeAdvice = {
   'lift-high': ['Стопа поднималась выше колена', 'Делай удар короче: мяч до пояса, стопа не выше колена.'],
@@ -43,16 +47,16 @@ let lastSummaryText = '';
 // Camera view: the whole frame by default, the widest lens the phone offers.
 const ULTRA_WIDE = /ultra ?wide|сверхширок/i;
 let lens = { ultraId: null, active: false };
-let engineWantsBall = false;
 // Rhythm: the moments the engine counted touches, foot lifts or reps.
 const RHYTHM_WORDS = { touches: ['касания', 'касаниями'], lifts: ['подъёмы стопы', 'подъёмами'], reps: ['повторы', 'повторами'] };
 let tally = { key: null, count: 0, times: [] };
 // Technical line for phone tests: tap the timer or open the page with ?debug.
 let debugOn = /[?&]debug\b/.test(location.search);
 let rate = { n: 0, since: 0, fps: 0, poseMs: 0 };
+let voiceQuestion = null; let questionBusy = false; let questionSerial = 0;
 
-export function initLive({ prefs, profile, ensureLiveCoach, getLiveCoach, onHistory }) {
-  Object.assign(ctx, { prefs, profile, ensureLiveCoach, getLiveCoach, onHistory });
+export function initLive({ prefs, profile, ensureLiveCoach, getLiveCoach, onHistory, releaseCoach }) {
+  Object.assign(ctx, { prefs, profile, ensureLiveCoach, getLiveCoach, onHistory, releaseCoach });
   facingMode = prefs.facing;
   video = $('cameraVideo'); overlay = $('poseCanvas'); demoCanvas = $('demoCanvas'); stage = $('stage');
   $('liveClose').addEventListener('click', () => stopSession());
@@ -68,7 +72,7 @@ export function initLive({ prefs, profile, ensureLiveCoach, getLiveCoach, onHist
     restartCamera(() => (lens.active ? 'Широкий угол 0.5×' : 'Обычный угол 1×'));
   });
   $('liveTimer').addEventListener('click', () => { debugOn = !debugOn; renderDebug(); toast(debugOn ? 'Технические данные включены' : 'Технические данные скрыты'); });
-  $('liveVoice').addEventListener('click', () => { ctx.prefs.voice = !ctx.prefs.voice; store.savePrefs(ctx.prefs); applyPrefs(); if (!ctx.prefs.voice && 'speechSynthesis' in window) speechSynthesis.cancel(); bus.emit('prefs-changed'); });
+  $('liveVoice').addEventListener('click', () => { ctx.prefs.voice = !ctx.prefs.voice; store.savePrefs(ctx.prefs); applyPrefs(); if (!ctx.prefs.voice) trainerAudio.cancel(); bus.emit('prefs-changed'); });
   $('liveSkeleton').addEventListener('click', () => { ctx.prefs.skeleton = !ctx.prefs.skeleton; store.savePrefs(ctx.prefs); applyPrefs(); bus.emit('prefs-changed'); });
   $('liveFar').addEventListener('click', () => { farManual = !farActive(); renderFar(); toast(farManual ? 'Крупный режим: последняя фраза во весь кадр' : 'Обычная лента комментариев'); });
   $('liveRetry').addEventListener('click', () => startLive({ skillId: sessionSkill, mode: source === 'file' && pendingFile ? 'file' : 'camera', file: pendingFile }));
@@ -77,6 +81,30 @@ export function initLive({ prefs, profile, ensureLiveCoach, getLiveCoach, onHist
   $('summaryAgain').addEventListener('click', () => { closeSheet(); startLive({ skillId: ctx.prefs.skill, mode: 'camera' }); });
   $('summaryClose').addEventListener('click', () => closeSheet());
   $('summaryShare').addEventListener('click', shareSummary);
+  voiceQuestion = createVoiceQuestion({
+    onText(question) { $('liveQuestionInput').value = question; askQuestion(question); },
+    onState(status, message) {
+      const listening = ['starting', 'listening'].includes(status);
+      $('liveQuestionMic').setAttribute('aria-pressed', String(listening));
+      $('liveQuestionMic').querySelector('span').textContent = listening ? 'Выключить микрофон' : 'Сказать вопрос';
+      if (message) text('liveQuestionStatus', message);
+    },
+  });
+  $('liveAsk').addEventListener('click', () => {
+    if (state !== 'live') return;
+    if (!$('liveQuestionPanel').hidden) { closeQuestion(); return; }
+    $('liveQuestionPanel').hidden = false; stage.dataset.question = 'open'; $('liveAsk').setAttribute('aria-expanded', 'true');
+    text('liveQuestionStatus', voiceQuestion.supported ? 'Нажми «Сказать вопрос» или напиши его. Микрофон включается только по нажатию.' : 'В этом браузере голосовой ввод недоступен. Напиши вопрос.');
+    $('liveQuestionMic').disabled = !voiceQuestion.supported || questionBusy;
+  });
+  $('closeLiveQuestion').addEventListener('click', closeQuestion);
+  $('liveQuestionMic').addEventListener('click', () => {
+    if (state !== 'live' || questionBusy) return;
+    if (voiceQuestion.listening) { voiceQuestion.abort(); text('liveQuestionStatus', 'Микрофон выключен.'); return; }
+    trainerAudio.cancel();
+    voiceQuestion.start();
+  });
+  $('liveQuestionForm').addEventListener('submit', event => { event.preventDefault(); askQuestion($('liveQuestionInput').value); });
   video.addEventListener('ended', () => { if (source === 'file' && state === 'live') stopSession(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'live') { togglePause(); toast('Эфир на паузе, пока вкладка скрыта'); } });
   window.addEventListener('pagehide', () => {
@@ -85,25 +113,28 @@ export function initLive({ prefs, profile, ensureLiveCoach, getLiveCoach, onHist
   });
   // Back from the browser cache: the camera and models were released on pagehide.
   window.addEventListener('pageshow', (event) => { if (event.persisted && state !== 'idle') { hideLive(); toast('Эфир остановлен, пока страница была скрыта'); } });
-  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && state === 'live' && !event.defaultPrevented) stopSession(); });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || event.defaultPrevented) return;
+    if (!$('liveQuestionPanel').hidden) { closeQuestion(); event.preventDefault(); return; }
+    if (state === 'live') stopSession();
+  });
 }
 
 export const isActive = () => ['live', 'paused', 'loading'].includes(state);
 export function setProfile(profile) { ctx.profile = profile; }
-/** Called when the ball-detector preference changes: the engine must be rebuilt. */
+/** Detector preference applies to the next session. */
 export function resetEngine() {
-  if (isActive()) { toast('Настройка мяча применится при следующем эфире'); return; }
+  if (isActive()) { toast('Настройка детектора предметов применится при следующем эфире'); return; }
   dropEngine();
 }
 function dropEngine() {
-  const pending = enginePromise; engine = null; enginePromise = null; engineWantsBall = false;
+  const pending = enginePromise; engine = null; enginePromise = null;
   pending?.then(v => v.close()).catch(() => {});
 }
 export function applyPrefs() {
   $('liveVoice').setAttribute('aria-pressed', String(ctx.prefs.voice));
   $('liveSkeleton').setAttribute('aria-pressed', String(ctx.prefs.skeleton));
-  if (overlay) overlay.style.opacity = ctx.prefs.skeleton ? '1' : '0';
-  // A mirror view only makes sense for the selfie camera, never for the rear one.
+  if (overlay) overlay.style.opacity = '1';
   const mirror = ctx.prefs.mirror && source === 'camera' && mode !== 'demo' && facingMode === 'user';
   if (video) video.style.transform = mirror ? 'scaleX(-1)' : '';
   if (overlay) overlay.style.transform = mirror ? 'scaleX(-1)' : '';
@@ -117,7 +148,10 @@ export function applyPrefs() {
 /* ───────────── Start / stop ───────────── */
 
 function showLive() { $('liveScreen').hidden = false; $('app').dataset.live = 'on'; closeSheet(); }
-function hideLive() { cancelRun(); state = 'idle'; $('liveScreen').hidden = true; $('app').dataset.live = 'off'; $('liveError').hidden = true; $('loadingCover').hidden = true; }
+function hideLive() {
+  cancelRun(); state = 'idle'; $('liveScreen').hidden = true; $('app').dataset.live = 'off'; $('liveError').hidden = true; $('loadingCover').hidden = true;
+  const pending = enginePromise; engine = null; enginePromise = null; pending?.then(value => value.close()).catch(() => {});
+}
 
 export async function startLive({ skillId, mode: newMode = 'camera', file = null } = {}) {
   unlockSpeech(); ensureAudio();
@@ -157,6 +191,8 @@ function resetSession(newMode, newSource) {
   lens = { ultraId: null, active: false }; renderLens(); renderDebug();
   $('feedbackList').replaceChildren(); $('liveReactions').replaceChildren(); $('liveError').hidden = true;
   text('liveTimer', '00:00'); text('liveMetricValue', '0'); text('liveSecondValue', '0');
+  text('detectedObjects', ''); $('detectedObjects').hidden = true;
+  $('liveQuestionInput').value = ''; text('liveQuestionReply', ''); $('liveQuestionReply').hidden = true;
   const skill = getSkill(sessionSkill);
   text('liveMetricLabel', skill.id === 'football' ? skill.metric.fallbackLabel.toLowerCase() : skill.metric.label.toLowerCase()); text('liveSecondLabel', skill.id === 'football' ? 'серия' : 'подсказок');
   text('liveBadge', mode === 'demo' ? 'ДЕМО' : source === 'file' ? 'ВИДЕО' : 'LIVE'); $('liveBadge').dataset.kind = mode === 'demo' ? 'demo' : source;
@@ -174,6 +210,8 @@ function setState(next) {
   $('livePause').querySelector('span').textContent = next === 'paused' ? 'Дальше' : 'Пауза';
   $('livePause').querySelector('use').setAttribute('href', next === 'paused' ? '#i-play' : '#i-pause');
   renderFar();
+  $('liveAsk').disabled = next !== 'live';
+  $('liveQuestionSend').disabled = next !== 'live' || questionBusy;
 }
 function startDemo(run) {
   demo = { pose: createPoseState(), ball: createBallState(), session: createSession(sessionSkill, { personality: ctx.prefs.personality }) };
@@ -203,19 +241,16 @@ function releaseMedia() {
   if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
 }
 function cancelRun() {
+  closeQuestion();
   generation++; cancelAnimationFrame(raf); raf = 0; releaseMedia();
   overlay?.getContext('2d').clearRect(0, 0, overlay.width, overlay.height);
-  if ('speechSynthesis' in window) speechSynthesis.cancel();
+  trainerAudio.release();
   audioCtx?.suspend().catch(() => {});
   $('stageFlash').removeAttribute('data-kind');
 }
 async function ensureEngine(run) {
-  // The ball detector is loaded only for skills with a ball: squats and balance start faster.
-  const wantBall = Boolean(ctx.prefs.ball && getSkill(sessionSkill).needsBall);
-  if (wantBall && !engineWantsBall && (engine || enginePromise)) dropEngine();
   if (!enginePromise) {
-    engineWantsBall = wantBall;
-    const pending = createCoachEngine({ ball: wantBall, onStatus(message) { if (generation === run) text('loadingText', message); } })
+    const pending = createCoachEngine({ objects: ctx.prefs.objects, onStatus(message) { if (generation === run) text('loadingText', message); } })
       .then(value => { if (enginePromise !== pending) { value.close(); throw new DOMException('Session cancelled', 'AbortError'); } engine = value; return value; })
       .catch(error => { if (enginePromise === pending) enginePromise = null; throw error; });
     enginePromise = pending;
@@ -281,9 +316,10 @@ function renderDebug() {
 }
 async function togglePause() {
   if (state === 'live') {
+    closeQuestion();
     setState('paused'); cancelAnimationFrame(raf); video.pause();
     stream?.getVideoTracks().forEach(t => { t.enabled = false; });
-    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    trainerAudio.release();
     text('stageHint', 'Пауза · продолжи, когда будешь готов');
   } else if (state === 'paused') {
     stream?.getVideoTracks().forEach(t => { t.enabled = true; });
@@ -319,7 +355,10 @@ function handleResult(result) {
     if (now - rate.since >= 1000) { rate.fps = (rate.n * 1000) / (now - rate.since); rate.n = 0; rate.since = now; renderDebug(); }
   }
   if (mode !== 'demo') {
-    drawPose(result.landmarks, result.ball);
+    drawPose(result.landmarks, result.ball, result.objects);
+    const labels = [...new Set((result.objects || []).map(o => o.label))].slice(0, 8);
+    text('detectedObjects', labels.length ? `В кадре: ${labels.join(', ').toLowerCase()}` : result.objectDetector ? 'Предметы пока не распознаны' : 'Детектор предметов выключен или недоступен');
+    $('detectedObjects').hidden = !ctx.prefs.objects;
     text('stageHint', result.quality === 'missing' ? 'Не вижу всё тело · отойди от камеры и добавь света' : result.quality === 'partial' ? 'Проверь, что плечи, колени и стопы в кадре' : result.lesson?.needsBall && !result.metrics.ballSeen ? 'Покажи мяч камере · касания считаются по нему' : 'Движения видны · продолжай в своём темпе');
   }
   if (result.feedback) addFeedback(result.feedback);
@@ -369,7 +408,7 @@ function renderLesson(lesson) {
 
 function addFeedback(feedback) {
   if (!feedback?.text) return;
-  if (cues.at(-1)?.text === feedback.text && elapsedMs - cues.at(-1).at < 12000) return;
+  if (feedback.tag !== 'question' && cues.at(-1)?.text === feedback.text && elapsedMs - cues.at(-1).at < 12000) return;
   const kind = feedback.kind || 'tip'; const from = feedback.source || 'rule';
   cues.push({ text: feedback.text, kind, tag: cueLabels[feedback.tag] || feedback.tag || 'Техника', rawTag: feedback.tag, source: from, at: elapsedMs });
   cues = cues.slice(-120);
@@ -380,7 +419,7 @@ function addFeedback(feedback) {
   item.append(avatar, body); $('feedbackList').append(item);
   while ($('feedbackList').children.length > 4) $('feedbackList').firstElementChild.remove();
   if (getSkill(sessionSkill).id !== 'football') text('liveSecondValue', cues.length);
-  speak(feedback.text, kind); flash(kind); playCue(kind); renderFar();
+  speak(feedback.text, kind, feedback.tag === 'question'); flash(kind); playCue(kind); renderFar();
   const emoji = REACTIONS[feedback.tag]; if (emoji) { react(emoji); haptic(kind === 'warning' ? [30, 40, 30] : 10); }
   else if (kind === 'warning') haptic([30, 40, 30]);
 }
@@ -388,17 +427,14 @@ function react(emoji) {
   const node = el('span', 'reaction', emoji); node.style.setProperty('--dx', `${Math.round(Math.random() * 40 - 20)}px`);
   $('liveReactions').append(node); node.addEventListener('animationend', () => node.remove());
 }
-function speak(message, kind = 'tip') {
-  if (!ctx.prefs.voice || !('speechSynthesis' in window) || state !== 'live') return;
+function speak(message, kind = 'tip', force = false) {
+  if (!ctx.prefs.voice || state !== 'live' || voiceQuestion?.listening || questionBusy) return;
   const urgent = kind !== 'tip'; const now = performance.now();
-  if (!urgent && (now - lastSpoken < 5000 || speechSynthesis.speaking)) return;
-  if (urgent && now - lastSpoken < 1200) return;
-  lastSpoken = now; if (urgent) speechSynthesis.cancel();
+  if (!force && !urgent && (now - lastSpoken < 5000 || trainerAudio.speaking)) return;
+  if (!force && urgent && now - lastSpoken < 1200) return;
+  lastSpoken = now; if (urgent || force) trainerAudio.cancel();
   const p = PERSONALITIES[ctx.prefs.personality];
-  const utterance = new SpeechSynthesisUtterance(message);
-  utterance.lang = 'ru-RU'; utterance.rate = p.voiceRate; utterance.pitch = p.voicePitch;
-  const voice = speechSynthesis.getVoices().find(v => v.lang.startsWith('ru')); if (voice) utterance.voice = voice;
-  speechSynthesis.speak(utterance);
+  trainerAudio.speak(message, ctx.prefs, p, { timeoutMs: kind === 'warning' ? 3000 : 6000 });
 }
 function keepAwake(run) {
   if (!navigator.wakeLock || mode === 'demo' || (wakeLock && !wakeLock.released)) return;
@@ -406,6 +442,7 @@ function keepAwake(run) {
 }
 let speechUnlocked = false;
 export function unlockSpeech() {
+  trainerAudio.unlock();
   if (!('speechSynthesis' in window) || speechUnlocked) return;
   speechUnlocked = true;
   try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; u.lang = 'ru-RU'; speechSynthesis.speak(u); speechSynthesis.getVoices(); } catch { /* optional */ }
@@ -443,13 +480,27 @@ function canvasContext(canvas) {
   if (canvas.width !== Math.round(width * ratio) || canvas.height !== Math.round(height * ratio)) { canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio); }
   const context = canvas.getContext('2d'); context.setTransform(ratio, 0, 0, ratio, 0, 0); return { ctx: context, width, height };
 }
-function drawPose(landmarks, ball) {
+/** The overlay is mirrored with the selfie view; text drawn on it is flipped back so it stays readable. */
+function readable(c, centreX, draw) {
+  if (overlay.style.transform !== 'scaleX(-1)') { draw(); return; }
+  c.save(); c.translate(centreX, 0); c.scale(-1, 1); c.translate(-centreX, 0); draw(); c.restore();
+}
+function drawPose(landmarks, ball, objects = []) {
   const { ctx: c, width, height } = canvasContext(overlay); c.clearRect(0, 0, width, height);
   if (!video.videoWidth) return;
   const fill = ctx.prefs.fit === 'cover';
   const scale = (fill ? Math.max : Math.min)(width / video.videoWidth, height / video.videoHeight);
   const ox = (width - video.videoWidth * scale) / 2, oy = (height - video.videoHeight * scale) / 2;
   const point = p => ({ x: p.x * video.videoWidth * scale + ox, y: p.y * video.videoHeight * scale + oy });
+  for (const object of objects) {
+    if (object.category === 'sports ball' && ball) continue; // the tracker draws the active ball separately
+    const corner = point({ x: object.x - object.w / 2, y: object.y - object.h / 2 });
+    const w = object.w * video.videoWidth * scale, h = object.h * video.videoHeight * scale;
+    c.strokeStyle = '#8cdbff'; c.lineWidth = 2; c.strokeRect(corner.x, corner.y, w, h);
+    c.font = '600 12px sans-serif'; const labelWidth = c.measureText(object.label).width + 10;
+    const x = Math.max(0, Math.min(width - labelWidth, corner.x)); const y = Math.max(18, Math.min(height - 2, corner.y));
+    readable(c, x + labelWidth / 2, () => { c.fillStyle = '#001b2de6'; c.fillRect(x, y - 18, labelWidth, 18); c.fillStyle = '#fff'; c.fillText(object.label, x + 5, y - 5); });
+  }
   if (landmarks?.length && ctx.prefs.skeleton) {
     c.lineWidth = 2.5; c.strokeStyle = 'rgba(255,255,255,.85)'; c.fillStyle = '#2d88ff';
     for (const [a, b] of POSE_CONNECTIONS) { const p = landmarks[a], q = landmarks[b]; if (!p || !q || (p.visibility ?? 1) < .5 || (q.visibility ?? 1) < .5) continue; const u = point(p), v = point(q); c.beginPath(); c.moveTo(u.x, u.y); c.lineTo(v.x, v.y); c.stroke(); }
@@ -458,7 +509,8 @@ function drawPose(landmarks, ball) {
   if (ball) {
     const centre = point(ball); const r = Math.max(10, ball.r * video.videoWidth * scale);
     c.lineWidth = 2.5; c.strokeStyle = '#ffd166'; c.beginPath(); c.arc(centre.x, centre.y, r, 0, Math.PI * 2); c.stroke();
-    c.fillStyle = '#ffd166'; c.font = '600 11px sans-serif'; c.fillText('мяч', centre.x + r + 4, centre.y + 4);
+    c.fillStyle = '#ffd166'; c.font = '600 11px sans-serif';
+    readable(c, centre.x + r + 14, () => c.fillText('мяч', centre.x + r + 4, centre.y + 4));
   }
 }
 
@@ -521,13 +573,13 @@ function snapshot() {
     lessonsDone: metrics.lessonsDone || 0, seconds: Math.floor(elapsedMs / 1000),
     touches: metrics.touches || 0, streak: metrics.streak || 0, bestStreak: metrics.bestStreak || 0, drops: metrics.drops || 0,
     lifts: metrics.lifts || 0, reps: metrics.reps || 0, balanceSeconds: metrics.balanceSeconds || 0,
-    ballSeen: Boolean(metrics.ballSeen), visiblePercent: frames.total ? Math.round(frames.good / frames.total * 100) : 0,
+    ballSeen: Boolean(metrics.ballSeen), ballEverSeen: Boolean(metrics.ballEverSeen), quality: lastResult?.quality || 'missing', objects: lastResult?.objects || [], visiblePercent: frames.total ? Math.round(frames.good / frames.total * 100) : 0,
     mainMistake: session ? mainMistake(session) : null, cues: cues.length,
   };
 }
 function maybeAskLiveCoach() {
   const coach = ctx.getLiveCoach();
-  if (mode === 'demo' || !coach || coach.busy || state !== 'live') return;
+  if (mode === 'demo' || !coach || coach.busy || state !== 'live' || questionBusy || voiceQuestion?.listening) return;
   if (elapsedMs - lastLiveAt < 12000 || elapsedMs < 8000) return;
   if (lastResult?.quality !== 'good') return;
   if ((lastResult?.timing?.poseMs || 0) > 110) return;
@@ -547,17 +599,18 @@ function stopSession() {
   const useTouches = skill.id === 'football' && metrics.ballEverSeen;
   const metricValue = skill.id === 'football' ? (useTouches ? metrics.touches : metrics.lifts) : skill.id === 'squats' ? metrics.reps : metrics.balanceSeconds;
   const metricLabel = skill.id === 'football' ? (useTouches ? 'касаний' : 'подъёмов стопы') : skill.id === 'squats' ? 'повторов' : 'с баланса';
-  const record = { date: new Date().toISOString(), goal: skill.goal, skill: sessionSkill, seconds: Math.floor(elapsedMs / 1000), metricValue: metricValue || 0, metricLabel, lessonsDone: metrics.lessonsDone || 0, lessonsTotal: skill.lessons.length, bestStreak: metrics.bestStreak || 0, cues: cues.length };
+  const metricKey = skill.id === 'football' ? (useTouches ? 'touches' : 'lifts') : skill.metric.key;
+  const record = { schemaVersion: 2, source: wasDemo ? 'demo' : source, metricKey, date: new Date().toISOString(), goal: skill.goal, skill: sessionSkill, seconds: Math.floor(elapsedMs / 1000), metricValue: metricValue || 0, metricLabel, lessonsDone: metrics.lessonsDone || 0, lessonsTotal: skill.lessons.length, bestStreak: metrics.bestStreak || 0, cues: cues.length };
   hideLive();
   if (!wasActive) { if (wasLoading) bus.emit('live-cancelled'); return; }
-  if (!wasDemo && record.seconds > 0) ctx.onHistory(record);
+  const progress = !wasDemo && record.seconds > 0 ? ctx.onHistory(record) : null;
   const done = record.lessonsDone;
   const lastLesson = skill.lessons[Math.min(done, skill.lessons.length) - 1];
   const mistake = summary.mainMistake;
   const nextLesson = skill.lessons[done];
   const planNext = !wasDemo && done >= skill.lessons.length ? nextInPlan(ctx.prefs.plan, sessionSkill) : null;
   const data = {
-    skillId: sessionSkill, skillName: skill.name, demo: wasDemo, seconds: record.seconds, metricValue: record.metricValue, metricLabel, lessonsDone: done, lessonsTotal: skill.lessons.length, bestStreak: record.bestStreak,
+    skillId: sessionSkill, skillName: skill.name, demo: wasDemo, source: record.source, progress: progress?.text || '', seconds: record.seconds, metricValue: record.metricValue, metricLabel, lessonsDone: done, lessonsTotal: skill.lessons.length, bestStreak: record.bestStreak,
     done: done ? `выполнено ${done} из ${skill.lessons.length}${lastLesson ? `, последний «${lastLesson.title}»` : ''}${record.bestStreak ? `, лучшая серия ${record.bestStreak}` : ''}.` : 'шаги урока пока не засчитаны, это нормально для первого раза.',
     mistake: mistake && mistakeAdvice[mistake.tag] ? `${mistakeAdvice[mistake.tag][0].toLowerCase()} (${mistake.count} раз).` : mistake ? `${(cueLabels[mistake.tag] || mistake.tag).toLowerCase()} (${mistake.count} раз).` : 'явных ошибок тренер не заметил.',
     next: planNext ? `следующий навык по маршруту «${getSkill(planNext).name}».` : nextLesson ? `«${nextLesson.title}», ${nextLesson.goal.toLowerCase()}.` : mistake && mistakeAdvice[mistake.tag] ? mistakeAdvice[mistake.tag][1] : 'повтори урок и попробуй увеличить серию.',
@@ -567,7 +620,7 @@ function stopSession() {
   text('summarySub', `${skill.emoji} ${skill.name} · ${PERSONALITIES[ctx.prefs.personality].name} тренер`);
   text('summaryTime', formatTime(record.seconds)); text('summaryMetric', record.metricValue); text('summaryMetricLabel', metricLabel); text('summaryLessons', `${done}/${skill.lessons.length}`);
   const notes = $('summaryNotes'); notes.replaceChildren();
-  for (const [label, value] of [['Получилось', data.done], ['Главная ошибка', data.mistake], ['Следующий шаг', data.next]]) { const row = el('div', 'summary-row'); row.append(el('b', null, label), el('span', null, value)); notes.append(row); }
+  for (const [label, value] of [['Получилось', data.done], ['Главная ошибка', data.mistake], ['Следующий шаг', data.next], ['Твой прогресс', data.progress]]) { if (!value) continue; const row = el('div', 'summary-row'); row.append(el('b', null, label), el('span', null, value)); notes.append(row); }
   notes.append(el('p', 'muted-note', wasDemo ? 'Это была демонстрация на нарисованном спортсмене. Показатели условные и не сохранены.' : skill.needsBall && !metrics.ballEverSeen ? 'Мяч не был виден камере, поэтому касания не считались: только подъёмы стопы по позе.' : 'Все наблюдения сделаны моделями на твоём устройстве.'));
   text('summaryPrivate', wasDemo ? 'Демо не сохраняется в историю.' : 'Сохранён только итог. Видео не записывалось.');
   $('summaryLive').hidden = true; text('summaryLiveText', '');
@@ -579,7 +632,48 @@ function stopSession() {
   bus.emit('live-finished', data);
   const coach = ctx.getLiveCoach();
   if (!wasDemo && coach && record.seconds > 20) {
-    coach.generate(buildSummary(summary), 'final').then(value => { if (value) { text('summaryLiveText', value); $('summaryLive').hidden = false; bus.emit('live-final-text', { ...data, live: value }); } });
+    const run = generation;
+    coach.generate(buildSummary(summary), 'final').then(value => { if (value && run === generation && !isActive()) { text('summaryLiveText', value); $('summaryLive').hidden = false; bus.emit('live-final-text', { ...data, live: value }); } }).finally(() => ctx.releaseCoach?.(coach));
+  } else ctx.releaseCoach?.(coach);
+}
+
+function closeQuestion() {
+  questionSerial++; questionBusy = false; voiceQuestion?.abort();
+  if ($('liveQuestionPanel')) $('liveQuestionPanel').hidden = true;
+  if (stage) delete stage.dataset.question;
+  $('liveAsk')?.setAttribute('aria-expanded', 'false');
+  if ($('liveQuestionSend')) $('liveQuestionSend').disabled = false;
+}
+
+async function askQuestion(raw) {
+  const question = cleanQuestion(raw);
+  if (!question || questionBusy || state !== 'live') return;
+  voiceQuestion?.abort();
+  const request = ++questionSerial, run = generation;
+  questionBusy = true; $('liveQuestionSend').disabled = true; $('liveQuestionMic').disabled = true;
+  text('liveQuestionStatus', `Вопрос: ${question}`);
+  const facts = snapshot(); const fallback = answerTrainingQuestion(question, facts);
+  let answer = fallback.text, viaModel = false;
+  const coach = ctx.getLiveCoach();
+  try {
+    if (fallback.rewrite && coach && !coach.busy && mode !== 'demo' && (lastResult?.timing?.poseMs || 0) <= 110) {
+      const summary = buildSummary(facts);
+      const candidate = await coach.chat(buildQuestionMessages(question, summary), { maxTokens: 120, temperature: .3 });
+      const checked = validateQuestionReply(candidate, summary);
+      if (checked.ok) { answer = checked.text; viaModel = true; }
+    }
+    if (run !== generation || request !== questionSerial || state !== 'live') return;
+    questionBusy = false;
+    text('liveQuestionReply', answer); $('liveQuestionReply').hidden = false;
+    text('liveQuestionStatus', `Вопрос: ${question} · данные на ${formatTime(facts.seconds)} · ${mode === 'demo' ? 'ответ по симуляции' : viaModel ? 'живой тренер' : 'ответ по правилам'}`);
+    addFeedback({ text: answer, tag: 'question', kind: 'tip', source: viaModel ? 'llm' : 'rule' });
+  } catch {
+    if (run === generation && request === questionSerial && state === 'live') {
+      questionBusy = false; text('liveQuestionReply', fallback.text); $('liveQuestionReply').hidden = false;
+      speak(fallback.text, 'tip', true);
+    }
+  } finally {
+    if (request === questionSerial) { questionBusy = false; $('liveQuestionSend').disabled = false; $('liveQuestionMic').disabled = !voiceQuestion?.supported; }
   }
 }
 async function shareSummary() {

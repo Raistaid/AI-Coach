@@ -1,12 +1,17 @@
 // Bootstrap: local profile gate, screens and tabs, chat drawer with swipe,
 // skill sheet, progress and profile screens. Wires chat.js and live.js together.
 import { SKILL_LIST, getSkill, PERSONALITIES } from '../skills/index.js';
-import { createLocalCoach, supportsWebGPU, LLM_MODELS } from '../coach-llm.js';
+import { createLocalCoach, hasCachedModel, supportsWebGPU, LLM_MODELS } from '../coach-llm.js';
 import { pluralize } from '../coach-planner.js';
+import { compareProgress } from '../coach-progress.js';
 import { $, text, el, icon, toast, haptic, bus, formatTime, relativeDate, openSheet, closeSheet, currentSheet, paintAvatar } from './ui.js';
 import * as store from './store.js';
 import * as chat from './chat.js';
 import * as live from './live.js';
+import { createModelManager } from './model-manager.js';
+import { russianVoices, voiceKey } from './speech.js';
+import { LOCAL_VOICES, localVoice } from './voice-models.js';
+import { trainerAudio } from './trainer-audio.js';
 import { initViewport } from './viewport.js';
 import { metricPhrase } from '../coach-talk.js';
 
@@ -15,7 +20,9 @@ const app = $('app');
 const prefs = store.loadPrefs();
 let profile = store.loadProfile();
 let history = store.loadHistory();
-let liveCoach = null; let liveCoachPromise = null;
+const makeModelManager = () => createModelManager({ models: LLM_MODELS, load: createLocalCoach, hasCached: hasCachedModel, canLoad: supportsWebGPU, isLive: live.isActive, onChange: renderModels });
+let modelManager = makeModelManager();
+let liveStartRequest = 0;
 let sheetSkillId = null;
 const steps = (n) => pluralize(n, ['шаг', 'шага', 'шагов']);
 
@@ -44,7 +51,7 @@ function showScreen(name) {
   app.dataset.screen = name;
   document.querySelectorAll('.tab[data-tab]').forEach(tab => { if (tab.dataset.tab === name) tab.setAttribute('aria-current', 'page'); else tab.removeAttribute('aria-current'); });
   if (name === 'progress') renderProgress();
-  if (name === 'profile') renderProfile();
+  if (name === 'profile') { renderProfile(); modelManager.refresh(); trainerAudio.refresh(); }
   if (name === 'catalog') renderCatalog();
   if (name !== 'chat') document.querySelector(`.screen-${name}`)?.scrollTo({ top: 0 });
   if (drawerOpen) setDrawer(false, { focus: false });
@@ -169,10 +176,10 @@ function openSkillSheet(skillId) {
   openSheet('sheetSkill');
 }
 bus.on('open-skill', openSkillSheet);
-$('skillStart').addEventListener('click', () => { closeSheet(); chat.introduceSkill(sheetSkillId); live.startLive({ skillId: sheetSkillId, mode: 'camera' }); });
-$('skillDemo').addEventListener('click', () => { closeSheet(); chat.introduceSkill(sheetSkillId); live.startLive({ skillId: sheetSkillId, mode: 'demo' }); });
+$('skillStart').addEventListener('click', () => { closeSheet(); chat.introduceSkill(sheetSkillId); startSession({ skillId: sheetSkillId, mode: 'camera' }); });
+$('skillDemo').addEventListener('click', () => { closeSheet(); chat.introduceSkill(sheetSkillId); startSession({ skillId: sheetSkillId, mode: 'demo' }); });
 $('skillFile').addEventListener('click', () => { live.unlockSpeech(); live.ensureAudio(); $('videoFile').click(); });
-$('videoFile').addEventListener('change', (event) => { const file = event.target.files[0]; event.target.value = ''; if (!file) return; closeSheet(); chat.introduceSkill(sheetSkillId); live.startLive({ skillId: sheetSkillId, mode: 'file', file }); });
+$('videoFile').addEventListener('change', (event) => { const file = event.target.files[0]; event.target.value = ''; if (!file) return; closeSheet(); chat.introduceSkill(sheetSkillId); startSession({ skillId: sheetSkillId, mode: 'file', file }); });
 document.querySelector('[data-sheet-backdrop]').addEventListener('click', closeSheet);
 
 /* ───────────── Progress ───────────── */
@@ -181,14 +188,17 @@ function renderProgress() {
   text('statTrainings', stats.trainings); text('statMinutes', stats.minutes); text('statStreak', stats.bestStreak); text('statDays', stats.days);
   const list = $('historyList'); list.replaceChildren(); $('clearHistory').disabled = history.length === 0;
   if (!history.length) { list.append(el('p', 'empty', 'Здесь появятся итоги эфиров. Демо в историю не записывается, видео не хранится.')); return; }
-  for (const session of history) {
+  for (const [index, session] of history.entries()) {
     const skill = getSkill(session.skill);
     const row = el('div', 'history-row');
     row.append(el('span', 'skill-emoji', skill.emoji));
     const copy = el('div');
-    copy.append(el('b', null, skill.name), el('small', null, [relativeDate(session.date), formatTime(session.seconds), metricPhrase(session.metricValue ?? 0, session.metricLabel || ''), `шагов ${session.lessonsDone}/${session.lessonsTotal}`, session.bestStreak ? `серия ${session.bestStreak}` : ''].filter(Boolean).join(' · ')));
+    copy.append(el('b', null, skill.name), el('small', null, [relativeDate(session.date), formatTime(session.seconds), metricPhrase(session.metricValue ?? session.movements ?? 0, session.metricLabel || ''), session.source === 'camera' ? 'Камера' : session.source === 'file' ? 'Видео' : 'Источник не указан', `шагов ${session.lessonsDone}/${session.lessonsTotal}`, session.bestStreak ? `серия ${session.bestStreak}` : ''].filter(Boolean).join(' · ')));
+    const progress = compareProgress(session, history.filter((_, otherIndex) => otherIndex !== index));
+    copy.append(el('p', `history-progress${progress?.isNewBest ? ' is-best' : ''}`, progress ? progress.text : 'Для этой записи сравнение недоступно.'));
     row.append(copy); list.append(row);
   }
+  list.append(el('p', 'history-note', 'Сравнение по последним 50 сохранённым тренировкам: отдельно для каждого навыка, показателя и источника. Количество движений не оценивает качество техники.'));
 }
 $('clearHistory').addEventListener('click', () => { history = []; store.saveHistory(history); renderProgress(); chat.setHistory(history); toast('История очищена'); });
 
@@ -214,74 +224,136 @@ function renderPersonalities() {
   }
 }
 function applyPreferences() {
-  for (const key of ['voice', 'skeleton', 'mirror', 'ball', 'sound', 'autoFar', 'liveCoach']) if ($(key + 'Input')) $(key + 'Input').checked = prefs[key];
+  for (const key of ['voice', 'skeleton', 'mirror', 'objects', 'sound', 'autoFar']) if ($(key + 'Input')) $(key + 'Input').checked = prefs[key];
   document.querySelectorAll('input[name=llmModel]').forEach(radio => { radio.checked = radio.value === prefs.llmModel; });
-  $('liveCoachBox').hidden = !prefs.liveCoach;
   live.applyPrefs(); applyTheme();
 }
-for (const key of ['voice', 'skeleton', 'mirror', 'ball', 'sound', 'autoFar']) $(key + 'Input').addEventListener('change', () => {
+for (const key of ['voice', 'skeleton', 'mirror', 'objects', 'sound', 'autoFar']) $(key + 'Input').addEventListener('change', () => {
   prefs[key] = $(key + 'Input').checked; store.savePrefs(prefs); applyPreferences();
   if (key === 'sound' && prefs.sound) live.ensureAudio();
-  if (key === 'voice' && !prefs.voice && 'speechSynthesis' in window) speechSynthesis.cancel();
-  if (key === 'ball') live.resetEngine();
+  if (key === 'voice' && !prefs.voice) trainerAudio.cancel();
+  if (key === 'objects') live.resetEngine();
 });
 $('themeSelect').addEventListener('change', () => { prefs.theme = $('themeSelect').value; store.savePrefs(prefs); applyTheme(); });
-$('liveCoachInput').addEventListener('change', () => {
-  prefs.liveCoach = $('liveCoachInput').checked; store.savePrefs(prefs); applyPreferences();
-  if (prefs.liveCoach) ensureLiveCoach().catch(() => {}); else unloadLiveCoach();
-});
 document.querySelectorAll('input[name=llmModel]').forEach(radio => radio.addEventListener('change', async () => {
   prefs.llmModel = radio.value; store.savePrefs(prefs);
-  if (liveCoach || liveCoachPromise) { await unloadLiveCoach(); if (prefs.liveCoach) ensureLiveCoach().catch(() => {}); }
+  await unloadLiveCoach(); if (prefs.liveCoach) ensureLiveCoach().catch(() => {});
 }));
 bus.on('prefs-changed', () => { applyPreferences(); if (app.dataset.screen === 'profile') renderPersonalities(); chat.renderStories(); });
 
 /* ───────────── Local LLM ───────────── */
-function setLiveCoachStatus(message, progress = null) {
-  text('liveCoachStatus', message);
-  if (progress !== null) $('liveCoachProgress').style.width = `${Math.round(progress * 100)}%`;
-}
-async function ensureLiveCoach() {
-  if (liveCoach) return liveCoach;
-  if (!liveCoachPromise) {
-    if (!supportsWebGPU()) { setLiveCoachStatus('В этом браузере нет WebGPU. Живой тренер недоступен, подсказки по правилам работают.'); throw new Error('no-webgpu'); }
-    const modelId = LLM_MODELS[prefs.llmModel].id;
-    const pending = createLocalCoach({ modelId, onStatus: m => { if (liveCoachPromise === pending) setLiveCoachStatus(m); }, onProgress: ({ progress, text: t }) => { if (liveCoachPromise === pending) setLiveCoachStatus(t || 'Загрузка модели…', progress); } })
-      .then(coach => {
-        // Switched off or switched to another size while downloading: free the GPU right away.
-        if (liveCoachPromise !== pending) { coach.unload(); throw new DOMException('Model load cancelled', 'AbortError'); }
-        liveCoach = coach; setLiveCoachStatus(`Живой тренер готов · ${LLM_MODELS[prefs.llmModel].label}`, 1); toast('Живой тренер подключён'); return coach;
-      })
-      .catch(error => {
-        if (error?.name === 'AbortError') throw error;
-        if (liveCoachPromise === pending) liveCoachPromise = null;
-        setLiveCoachStatus(error.message || 'Не удалось запустить модель.', 0); prefs.liveCoach = false; store.savePrefs(prefs); applyPreferences(); throw error;
-      });
-    liveCoachPromise = pending;
+function renderModels() {
+  for (const [key, info] of Object.entries(modelManager.states)) {
+    const button = document.querySelector(`[data-download-model="${key}"]`);
+    const ready = info.status === 'cached';
+    if (ready && !prefs.liveCoach) { prefs.liveCoach = true; store.savePrefs(prefs); }
+    button.textContent = ready ? 'Скачана' : info.status === 'loading' ? 'Загружается…' : 'Скачать';
+    button.dataset.ready = String(ready);
+    button.disabled = ready || modelManager.busy || trainerAudio.downloading || info.status === 'checking' || !supportsWebGPU() || live.isActive();
+    button.setAttribute('aria-label', `${ready ? 'Скачана' : 'Скачать'} ${LLM_MODELS[key].label}`);
+    text(`modelStatus-${key}`, !supportsWebGPU() ? 'Для скачивания и запуска нужен WebGPU' : info.message);
+    const bar = $(`modelProgress-${key}`); bar.hidden = info.status !== 'loading'; bar.value = info.progress;
   }
-  return liveCoachPromise;
+  $('cancelModelDownload').hidden = !modelManager.downloading;
+  renderLocalVoiceControls();
+}
+document.querySelectorAll('[data-download-model]').forEach(button => button.addEventListener('click', async () => {
+  const key = button.dataset.downloadModel;
+  text('liveCoachStatus', `Скачиваем ${LLM_MODELS[key].label}. Можно отменить загрузку.`);
+  try { await modelManager.download(key); text('liveCoachStatus', `${LLM_MODELS[key].label} скачана. Она будет использоваться в эфире и чате.`); }
+  catch (error) { if (error.name !== 'AbortError') { text('liveCoachStatus', error.message); toast(error.message); } }
+}));
+$('cancelModelDownload').addEventListener('click', async () => { await modelManager.cancelDownload(); text('liveCoachStatus', 'Скачивание отменено.'); modelManager.refresh(); });
+async function ensureLiveCoach() {
+  try {
+    const coach = await modelManager.activate(prefs.llmModel);
+    text('liveCoachStatus', `Живой тренер готов · ${LLM_MODELS[prefs.llmModel].label}`);
+    return coach;
+  } catch (error) {
+    if (error.name !== 'AbortError') {
+      text('liveCoachStatus', error.message || 'Не удалось запустить модель.');
+      if (!modelManager.downloading) { prefs.liveCoach = false; store.savePrefs(prefs); applyPreferences(); }
+    }
+    throw error;
+  }
 }
 async function unloadLiveCoach() {
-  const coach = liveCoach; liveCoach = null; liveCoachPromise = null;
-  if (coach) await coach.unload();
-  setLiveCoachStatus('Модель выгружена. Включи, чтобы загрузить снова.', 0);
+  await modelManager.release();
+  text('liveCoachStatus', 'Модель выгружена из памяти. Скачанные файлы остаются в кеше.');
 }
-window.addEventListener('pagehide', () => { if (liveCoach) { const coach = liveCoach; liveCoach = null; liveCoachPromise = null; coach.unload(); } });
-if (!supportsWebGPU()) { $('liveCoachInput').disabled = true; text('liveCoachHint', 'Нужен WebGPU. В этом браузере его нет: подсказки по правилам работают, живой тренер недоступен.'); prefs.liveCoach = false; }
+window.addEventListener('pagehide', () => { liveStartRequest++; modelManager.dispose(); trainerAudio.dispose(); });
+window.addEventListener('pageshow', event => { if (event.persisted) { modelManager = makeModelManager(); renderModels(); } });
+if (!supportsWebGPU()) text('liveCoachStatus', 'Для локальной модели нужен WebGPU. Подсказки по правилам работают без неё.');
+
+/* ───────────── Trainer voice ───────────── */
+function renderVoiceOptions() {
+  const select = $('coachVoiceSelect'); select.replaceChildren(el('option', null, 'Автоматически · русский'));
+  select.options[0].value = '';
+  const local = el('optgroup'); local.label = 'Скачиваемые голоса · на устройстве';
+  for (const voice of LOCAL_VOICES) { const option = el('option', null, `${voice.name} · ${voice.description}`); option.value = voice.id; local.append(option); }
+  select.append(local);
+  const system = el('optgroup'); system.label = 'Голоса браузера и системы';
+  const voices = russianVoices(window.speechSynthesis?.getVoices() || []);
+  for (const voice of voices) { const option = el('option', null, `${voice.name}${voice.localService ? '' : ' · онлайн'}`); option.value = voiceKey(voice); system.append(option); }
+  if (voices.length) select.append(system);
+  select.value = localVoice(prefs.voiceId) || voices.some(v => voiceKey(v) === prefs.voiceId) ? prefs.voiceId : '';
+  text('voiceHint', 'Денис и Дмитрий озвучивают текст на устройстве после скачивания. Можно также выбрать русский голос системы.');
+  renderLocalVoiceControls();
+}
+function renderLocalVoiceControls() {
+  const voice = localVoice(prefs.voiceId), state = voice && trainerAudio.states[voice.id];
+  $('coachVoiceSelect').disabled = trainerAudio.downloading;
+  const button = $('downloadCoachVoice'), ready = state?.status === 'cached';
+  button.hidden = !voice;
+  button.textContent = ready ? 'Голос скачан' : state?.status === 'downloading' ? 'Скачивается…' : 'Скачать голос · 63 МБ';
+  button.dataset.ready = String(ready);
+  button.disabled = ready || trainerAudio.downloading || modelManager.busy || live.isActive() || !trainerAudio.supported || state?.status === 'unknown';
+  $('previewCoachVoice').disabled = voice ? !ready || trainerAudio.downloading : !window.speechSynthesis;
+  $('cancelVoiceDownload').hidden = !trainerAudio.downloading;
+  const bar = $('voiceDownloadProgress'); bar.hidden = !trainerAudio.downloading; bar.value = state?.progress || 0;
+  const message = trainerAudio.statusVoiceId === prefs.voiceId ? trainerAudio.status : '';
+  text('voiceDownloadStatus', voice && !trainerAudio.supported ? 'Для скачиваемых голосов нужен браузер с локальным хранилищем и Web Audio. Выбери системный голос.' : message || (ready ? 'Голос скачан. Нажми «Прослушать голос», чтобы выбрать звучание.' : voice ? 'Один раз скачай голос. При первом запуске также загрузится модуль озвучивания.' : 'Выбранный голос озвучивает подсказки и ответы в эфире.'));
+}
+trainerAudio.onChange(() => { renderLocalVoiceControls(); renderModels(); });
+$('coachVoiceSelect').addEventListener('change', () => { trainerAudio.release(); prefs.voiceId = $('coachVoiceSelect').value; store.savePrefs(prefs); renderLocalVoiceControls(); trainerAudio.refresh(); });
+$('downloadCoachVoice').addEventListener('click', async () => {
+  if (modelManager.busy || live.isActive()) return;
+  try { await trainerAudio.downloadVoice(prefs.voiceId); } catch (error) { if (error.name !== 'AbortError') toast(error.message); }
+});
+$('cancelVoiceDownload').addEventListener('click', () => trainerAudio.cancelDownload());
+$('previewCoachVoice').addEventListener('click', () => {
+  trainerAudio.unlock();
+  trainerAudio.speak('Привет! Давай потренируемся вместе. Не спеши, держи равновесие. У тебя всё получится.', prefs, PERSONALITIES[prefs.personality]);
+});
+window.speechSynthesis?.addEventListener('voiceschanged', renderVoiceOptions);
+renderVoiceOptions(); renderModels(); trainerAudio.refresh();
 
 /* ───────────── Live wiring ───────────── */
-bus.on('start-live', ({ skillId, mode }) => { closeSheet(); setDrawer(false); live.startLive({ skillId, mode }); });
+async function startSession(options) {
+  live.unlockSpeech(); live.ensureAudio();
+  const request = ++liveStartRequest; closeSheet(); setDrawer(false);
+  await trainerAudio.cancelDownload(); if (request !== liveStartRequest) return;
+  if (modelManager.downloading) { await modelManager.cancelDownload(); toast('Скачивание остановлено: анализ движений важнее.'); }
+  await modelManager.release(); if (request !== liveStartRequest) return;
+  live.startLive(options);
+}
+bus.on('start-live', startSession);
 bus.on('gesture', () => { live.unlockSpeech(); live.ensureAudio(); });
-bus.on('live-started', ({ skillId, mode }) => chat.postSystem(`${mode === 'demo' ? 'Демо начато' : mode === 'file' ? 'Разбор видео начат' : 'Эфир начат'} · ${getSkill(skillId).name}`));
-bus.on('live-finished', (data) => { chat.postSummary(data); if (app.dataset.screen === 'progress') renderProgress(); chat.setHistory(history); });
-bus.on('live-final-text', (data) => chat.attachLiveText(data.live));
+bus.on('live-final-text', data => chat.attachLiveText(data.live));
 bus.on('live-failed', () => chat.postSystem('Эфир не запустился'));
 bus.on('live-cancelled', () => chat.postSystem('Эфир отменён'));
+bus.on('live-started', ({ skillId, mode }) => chat.postSystem(`${mode === 'demo' ? 'Демо начато' : mode === 'file' ? 'Разбор видео начат' : 'Эфир начат'} · ${getSkill(skillId).name}`));
+bus.on('live-finished', (data) => { chat.postSummary(data); if (app.dataset.screen === 'progress') renderProgress(); chat.setHistory(history); renderModels(); });
 live.initLive({
-  prefs, profile, ensureLiveCoach, getLiveCoach: () => liveCoach,
-  onHistory(record) { history = [record, ...history].slice(0, 50); store.saveHistory(history); chat.setHistory(history); },
+  prefs, profile, ensureLiveCoach, getLiveCoach: () => modelManager.loaded,
+  async releaseCoach(coach) { if (!live.isActive() && (!coach || modelManager.loaded === coach)) await unloadLiveCoach(); },
+  onHistory(record) {
+    const progress = compareProgress(record, history.slice(0, 49));
+    history = [record, ...history].slice(0, 50); store.saveHistory(history); chat.setHistory(history);
+    return progress;
+  },
 });
-chat.initChat({ prefs, profile, history, ensureLiveCoach, getLiveCoach: () => liveCoach });
+chat.initChat({ prefs, profile, history, ensureLiveCoach, getLiveCoach: () => modelManager.loaded });
 
 /* ───────────── Coming back after a break opens a new chat ───────────── */
 const NEW_CHAT_AFTER_MS = 30 * 60 * 1000;

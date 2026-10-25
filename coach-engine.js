@@ -3,10 +3,12 @@
 // unit-tested: pose observations, ball tracking, lesson progression, phrases.
 import { getSkill, personalityId } from './skills/index.js';
 import { COMMON_PHRASES, pickPhrase, fillTemplate } from './skills/common.js';
+import { normalizeObjects, ballDetections } from './coach-objects.js';
 
 export const MODEL_VERSION = '0.10.21';
 export const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
-export const BALL_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite';
+export const OBJECT_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite';
+export const BALL_MODEL_URL = OBJECT_MODEL_URL;
 const CDN_ROOT = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MODEL_VERSION}`;
 
 export const POSE_CONNECTIONS = [
@@ -407,7 +409,7 @@ export function farModeDecision(previous, legScale, quality = 'good') {
 
 /* ───────────────────────── Browser wiring ───────────────────────── */
 
-export async function createCoachEngine({ onStatus = () => {}, ball = true } = {}) {
+export async function createCoachEngine({ onStatus = () => {}, ball = true, objects = ball } = {}) {
   let landmarker; let detector = null;
   try {
     onStatus('Загружаем AI-модель позы…');
@@ -425,16 +427,16 @@ export async function createCoachEngine({ onStatus = () => {}, ball = true } = {
       onStatus('Подключаем совместимый режим AI…');
       landmarker = await PoseLandmarker.createFromOptions(vision, { ...options, baseOptions: { ...options.baseOptions, delegate: 'CPU' } });
     }
-    if (ball) {
-      onStatus('Загружаем детектор мяча…');
-      const ballOptions = { baseOptions: { modelAssetPath: BALL_MODEL_URL, delegate: 'GPU' }, runningMode: 'VIDEO', scoreThreshold: 0.3, maxResults: 3, categoryAllowlist: ['sports ball'] };
-      try { detector = await ObjectDetector.createFromOptions(vision, ballOptions); }
+    if (objects) {
+      onStatus('Загружаем детектор предметов…');
+      const objectOptions = { baseOptions: { modelAssetPath: OBJECT_MODEL_URL, delegate: 'GPU' }, runningMode: 'VIDEO', scoreThreshold: 0.3, maxResults: 15 };
+      try { detector = await ObjectDetector.createFromOptions(vision, objectOptions); }
       catch {
-        try { detector = await ObjectDetector.createFromOptions(vision, { ...ballOptions, baseOptions: { ...ballOptions.baseOptions, delegate: 'CPU' } }); }
-        catch (cause) { console.warn('Aimo: ball detector unavailable', cause); detector = null; }
+        try { detector = await ObjectDetector.createFromOptions(vision, { ...objectOptions, baseOptions: { ...objectOptions.baseOptions, delegate: 'CPU' } }); }
+        catch (cause) { console.warn('Aimo: object detector unavailable', cause); detector = null; }
       }
     }
-    onStatus(detector ? 'AI-модели готовы · поза и мяч на устройстве' : 'AI-модель готова · поза на устройстве, мяч не отслеживается');
+    onStatus(detector ? 'AI-модели готовы · поза и предметы на устройстве' : 'AI-модель позы готова · детектор предметов выключен или недоступен');
   } catch (cause) {
     landmarker?.close();
     const error = new Error('Не удалось загрузить AI-модель. Проверь интернет и попробуй ещё раз. Можно открыть демо без камеры.');
@@ -449,13 +451,14 @@ export async function createCoachEngine({ onStatus = () => {}, ball = true } = {
   let lastTimestamp = -1;
   let lastBallAt = -Infinity;
   let ballInterval = 160;
-  let lastDetections = [];
+  let lastObjects = [];
 
   return {
     hasBallDetector: Boolean(detector),
+    hasObjectDetector: Boolean(detector),
     start(skillId = 'football', personality = 'calm') {
       pose = createPoseState(); ballState = createBallState(); session = createSession(skillId, { personality });
-      lastTimestamp = -1; lastBallAt = -Infinity; lastDetections = [];
+      lastTimestamp = -1; lastBallAt = -Infinity; lastObjects = [];
     },
     skip() { session = skipLesson(session); },
     get session() { return session; },
@@ -471,16 +474,17 @@ export async function createCoachEngine({ onStatus = () => {}, ball = true } = {
       pose = observed.state;
       const poseMs = performance.now() - started;
       const skillNeedsBall = getSkill(session.skillId).needsBall;
-      if (detector && skillNeedsBall && frameTimestamp - lastBallAt >= ballInterval) {
+      if (detector && frameTimestamp - lastBallAt >= ballInterval) {
         lastBallAt = frameTimestamp;
-        const detected = detector.detectForVideo(video, frameTimestamp);
-        lastDetections = (detected.detections || []).filter(d => d.boundingBox).map(d => ({
-          x: (d.boundingBox.originX + d.boundingBox.width / 2) / video.videoWidth,
-          y: (d.boundingBox.originY + d.boundingBox.height / 2) / video.videoHeight,
-          w: d.boundingBox.width / video.videoWidth, h: d.boundingBox.height / video.videoHeight,
-          score: d.categories?.[0]?.score ?? 0,
-        }));
-        ballState = trackBall(lastDetections, ballState, frameTimestamp, observed.obs, aspect);
+        try {
+          const detected = detector.detectForVideo(video, frameTimestamp);
+          lastObjects = normalizeObjects(detected.detections, video.videoWidth, video.videoHeight);
+        } catch (cause) {
+          detector.close(); detector = null; lastObjects = [];
+          onStatus('Детектор предметов недоступен. Анализ позы продолжает работать.');
+          console.warn('Aimo object detection:', cause);
+        }
+        if (skillNeedsBall) ballState = trackBall(ballDetections(lastObjects), ballState, frameTimestamp, observed.obs, aspect);
         // Pose keeps priority: slow frames push the ball detector to a lower rate.
         const total = performance.now() - started;
         ballInterval = total > 110 ? Math.min(400, ballInterval + 40) : Math.max(120, ballInterval - 10);
@@ -494,7 +498,8 @@ export async function createCoachEngine({ onStatus = () => {}, ball = true } = {
       return {
         landmarks: observed.obs.points, ball: ballState.seen ? { x: ballState.x, y: ballState.y, r: ballState.r } : null,
         quality: observed.obs.quality, feedback: stepped.feedback, lesson: stepped.lesson, metrics: stepped.metrics,
-        timing: { poseMs }, ballDetector: Boolean(detector),
+        objects: frameTimestamp - lastBallAt <= 700 ? lastObjects : [],
+        timing: { poseMs }, ballDetector: Boolean(detector), objectDetector: Boolean(detector),
         scale: observed.obs.quality === 'good' ? observed.obs.legScale : null,
       };
     },

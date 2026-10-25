@@ -1,14 +1,18 @@
 // Offline support: after the first visit the app shell and the on-device vision models
 // work without a network (a stage, a sports ground). Same-origin files: network first,
 // so a new deploy shows up at once and the cache is only a fallback. Versioned CDN
-// files (MediaPipe, the WebLLM library, the pose and ball models): cache first, their
-// URLs carry the version and never change. WebLLM keeps its own model caches; they are
-// never touched here.
+// files (MediaPipe, the WebLLM library, the pose and object models): cache first, their
+// URLs carry the version and never change. WebLLM keeps its own model caches and Piper
+// voices live in OPFS; neither is touched here. The Piper runtime comes from esm.sh with
+// unversioned polyfills, so it is not cached: offline the browser voice reads the phrases.
 const CACHE = 'aimo-v1';
 const SHELL = [
   './', './index.html', './styles.css',
   './app/main.js', './app/chat.js', './app/live.js', './app/store.js', './app/ui.js', './app/viewport.js',
-  './coach-engine.js', './coach-llm.js', './coach-planner.js', './coach-talk.js', './rhythm.js', './llm-worker.js',
+  './app/model-manager.js', './app/speech.js', './app/trainer-audio.js', './app/tts-worker.js',
+  './app/voice-cache.js', './app/voice-models.js',
+  './coach-engine.js', './coach-llm.js', './coach-planner.js', './coach-talk.js', './coach-progress.js',
+  './coach-objects.js', './coach-questions.js', './rhythm.js', './llm-worker.js',
   './skills/index.js', './skills/common.js', './skills/football.js', './skills/squats.js', './skills/balance.js',
 ];
 const IMMUTABLE = [

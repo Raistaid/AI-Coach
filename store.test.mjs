@@ -2,6 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { initials, sanitizeProfile, greeting, sanitizePrefs, streakDays, historyStats, createThread, freshThread, appendMessage, threadTitle, isFresh, replaceThread, sanitizeChats, AVATAR_HUES } from './app/store.js';
 
+test('object-detector preference migrates the old ball switch and saved voice is sanitized', () => {
+  assert.equal(sanitizePrefs({ ball: false }).objects, false);
+  assert.equal(sanitizePrefs({ ball: false, objects: true }).objects, true);
+  assert.equal(sanitizePrefs({ voiceId: 'voice-uri' }).voiceId, 'voice-uri');
+  assert.equal(sanitizePrefs({ voiceId: {} }).voiceId, '');
+  assert.equal('ball' in sanitizePrefs({ ball: true }), false);
+});
+
 test('profile is sanitized: trimmed name, known hue, no empty names', () => {
   assert.equal(sanitizeProfile({ name: '  Максим  ', hue: 999 }).name, 'Максим');
   assert.equal(sanitizeProfile({ name: 'Максим', hue: 999 }).hue, AVATAR_HUES[0]);

@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: 22
       - name: Unit tests
-        run: node --test engine.test.mjs llm.test.mjs planner.test.mjs store.test.mjs viewport.test.mjs talk.test.mjs rhythm.test.mjs
+        run: npm test
       - name: Build static site
         run: node scripts/build.mjs
       - uses: actions/configure-pages@v5

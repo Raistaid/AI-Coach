@@ -57,8 +57,8 @@ export function greeting(name, hour = new Date().getHours()) {
 
 /* ───────────── Preferences ───────────── */
 
-// Front camera by default: the phone stands facing the athlete, who reads the coach on screen.
-const DEFAULT_PREFS = { voice: true, skeleton: true, mirror: true, ball: true, sound: true, autoFar: true, liveCoach: false, llmModel: 'default', skill: 'football', personality: 'calm', plan: [], planGoal: '', theme: 'system', facing: 'user', fit: 'contain', wide: true };
+// Front camera by default, the whole frame on screen; retain local voice/object settings.
+const DEFAULT_PREFS = { voice: true, voiceId: '', skeleton: true, mirror: true, objects: true, sound: true, autoFar: true, liveCoach: false, llmModel: 'default', skill: 'football', personality: 'calm', plan: [], planGoal: '', theme: 'system', facing: 'user', fit: 'contain', wide: true };
 
 export function sanitizePrefs(raw) {
   const prefs = { ...DEFAULT_PREFS, ...(raw && typeof raw === 'object' ? raw : {}) };
@@ -71,7 +71,10 @@ export function sanitizePrefs(raw) {
   if (!['user', 'environment'].includes(prefs.facing)) prefs.facing = 'user';
   if (!['contain', 'cover'].includes(prefs.fit)) prefs.fit = 'contain'; // the whole frame: what the coach analyses
   prefs.wide = prefs.wide !== false;
-  for (const key of ['voice', 'skeleton', 'mirror', 'ball', 'sound', 'autoFar', 'liveCoach']) prefs[key] = Boolean(prefs[key]);
+  prefs.voiceId = typeof prefs.voiceId === 'string' ? prefs.voiceId.slice(0, 300) : '';
+  if (typeof raw?.objects !== 'boolean' && typeof raw?.ball === 'boolean') prefs.objects = raw.ball;
+  delete prefs.ball;
+  for (const key of ['voice', 'skeleton', 'mirror', 'objects', 'sound', 'autoFar', 'liveCoach']) prefs[key] = Boolean(prefs[key]);
   return prefs;
 }
 export const loadPrefs = () => sanitizePrefs(storage.read(KEYS.prefs, {}));

@@ -21,6 +21,20 @@ const MISTAKE_LABELS = {
 
 export const supportsWebGPU = () => typeof navigator !== 'undefined' && Boolean(navigator.gpu);
 
+let webllmPromise;
+async function loadWebLLM() {
+  if (!webllmPromise) webllmPromise = import(WEBLLM_URL).catch(cause => {
+    webllmPromise = null;
+    const error = new Error('Не удалось загрузить библиотеку WebLLM. Проверь интернет.'); error.cause = cause; throw error;
+  });
+  return webllmPromise;
+}
+export async function hasCachedModel(modelId) {
+  if (!Object.values(LLM_MODELS).some(model => model.id === modelId)) throw new Error('Неизвестная модель.');
+  const webllm = await loadWebLLM();
+  return webllm.hasModelInCache(modelId);
+}
+
 /** Numbers only. This is the whole context the model gets. */
 export function buildSummary(snapshot = {}) {
   const skill = getSkill(snapshot.skillId);
@@ -110,26 +124,36 @@ export function validateReply(reply, summary, mode = 'live') {
  * `generate(summary, mode)` and `unload()`. Throws a friendly error when the
  * device cannot run the model.
  */
-export async function createLocalCoach({ modelId = LLM_MODELS.default.id, onStatus = () => {}, onProgress = () => {} } = {}) {
+export async function createLocalCoach({ modelId = LLM_MODELS.default.id, onStatus = () => {}, onProgress = () => {}, signal } = {}) {
   if (!supportsWebGPU()) throw new Error('В этом браузере нет WebGPU. Живой тренер недоступен, подсказки по правилам работают.');
   if (typeof Worker === 'undefined') throw new Error('Этот браузер не поддерживает Web Worker.');
-  let webllm;
-  try { webllm = await import(WEBLLM_URL); }
-  catch (cause) { const error = new Error('Не удалось загрузить библиотеку WebLLM. Проверь интернет.'); error.cause = cause; throw error; }
+  const aborted = () => { if (signal?.aborted) throw new DOMException('Загрузка отменена', 'AbortError'); };
+  aborted();
+  const webllm = await loadWebLLM();
+  aborted();
   const cached = await webllm.hasModelInCache(modelId).catch(() => false);
+  aborted();
   onStatus(cached ? 'Модель найдена в кеше, запускаем…' : 'Скачиваем модель живого тренера…');
   const worker = new Worker(new URL('./llm-worker.js', import.meta.url), { type: 'module' });
   let engine;
+  let abortLoad;
   try {
-    engine = await webllm.CreateWebWorkerMLCEngine(worker, modelId, {
+    const loading = webllm.CreateWebWorkerMLCEngine(worker, modelId, {
       initProgressCallback: (report) => onProgress({ progress: report.progress ?? 0, text: report.text ?? '' }),
     });
+    const cancellation = new Promise((_, reject) => {
+      abortLoad = () => { worker.terminate(); reject(new DOMException('Загрузка отменена', 'AbortError')); };
+      signal?.addEventListener('abort', abortLoad, { once: true });
+      if (signal?.aborted) abortLoad();
+    });
+    engine = await Promise.race([loading, cancellation]);
   } catch (cause) {
     worker.terminate();
+    if (cause.name === 'AbortError') throw cause;
     const error = new Error('Не удалось запустить модель на этом устройстве. Возможно, не хватает памяти GPU.');
     error.cause = cause;
     throw error;
-  }
+  } finally { if (abortLoad) signal?.removeEventListener('abort', abortLoad); }
   onStatus('Живой тренер готов');
   let busy = false;
   let closed = false;

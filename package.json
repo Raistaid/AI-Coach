@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "python3 -m http.server 4173 --bind 127.0.0.1",
-    "test": "node --test engine.test.mjs llm.test.mjs planner.test.mjs store.test.mjs viewport.test.mjs talk.test.mjs rhythm.test.mjs",
+    "test": "node --test",
     "build": "node scripts/build.mjs"
   }
 }

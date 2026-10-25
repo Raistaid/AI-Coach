@@ -160,13 +160,13 @@ function skillCard(data) {
 }
 function summaryCard(data) {
   const card = el('div', 'card summary');
-  card.append(el('b', 'card-title', `${data.demo ? 'Демо' : 'Эфир'} · ${data.skillName || ''}`));
+  card.append(el('b', 'card-title', `${data.demo ? 'Демо' : data.source === 'file' ? 'Видео' : 'Эфир'} · ${data.skillName || ''}`));
   const stats = el('div', 'card-stats');
   for (const [value, label] of [[formatTime(data.seconds || 0), 'в движении'], [String(data.metricValue ?? 0), data.metricLabel || ''], [`${data.lessonsDone ?? 0}/${data.lessonsTotal ?? 0}`, 'шагов']]) {
     const cell = el('div'); cell.append(el('b', null, value), el('span', null, label)); stats.append(cell);
   }
   card.append(stats);
-  for (const [label, value] of [['Получилось', data.done], ['Главная ошибка', data.mistake], ['Следующий шаг', data.next]]) {
+  for (const [label, value] of [['Получилось', data.done], ['Главная ошибка', data.mistake], ['Следующий шаг', data.next], ['Твой прогресс', data.progress]]) {
     if (!value) continue;
     const line = el('p', 'card-line'); line.append(el('b', null, `${label}: `), document.createTextNode(value)); card.append(line);
   }
