@@ -4,6 +4,7 @@
 // session; the personality changes the tone, never the facts, and the advice on
 // pain is identical for every personality. Pure functions, tested in talk.test.mjs.
 import { pluralize } from './coach-planner.js';
+import { SKILL_LIST } from './skills/index.js';
 
 /** Lower case, ё → е, punctuation and emoji dropped, single spaces. */
 export const normalizeTalk = (value) => String(value || '').toLowerCase().replace(/ё/g, 'е').replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
@@ -39,12 +40,13 @@ export function looksLikeGoal(message) {
 }
 
 // Summary labels are stored in the «many» form; sentences need the right number agreement.
-const METRIC_FORMS = {
-  'касаний': ['касание', 'касания', 'касаний'],
-  'подъёмов стопы': ['подъём стопы', 'подъёма стопы', 'подъёмов стопы'],
-  'повторов': ['повтор', 'повтора', 'повторов'],
-  'с баланса': ['секунда баланса', 'секунды баланса', 'секунд баланса'],
-};
+// Every skill declares its forms, so a new skill brings its own grammar.
+const METRIC_FORMS = Object.fromEntries(SKILL_LIST.flatMap(skill => {
+  const m = skill.metric;
+  const list = [[m.label, m.forms]];
+  if (m.fallbackLabel && m.fallbackForms) list.push([m.fallbackLabel, m.fallbackForms]);
+  return list.filter(([label, forms]) => label && Array.isArray(forms));
+}));
 /** «4 касания», «1 подъём стопы», «12 секунд баланса»; unknown labels stay as they are. */
 export function metricPhrase(value, label) {
   const forms = METRIC_FORMS[label];

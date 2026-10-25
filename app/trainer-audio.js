@@ -8,14 +8,28 @@ export function createTrainerAudio({ store = createVoiceStore(), makeWorker = ()
   const listeners = new Set();
   const states = Object.fromEntries(LOCAL_VOICES.map(v => [v.id, { status: 'unknown', progress: 0 }]));
   const versions = Object.fromEntries(LOCAL_VOICES.map(v => [v.id, 0]));
-  let audioContext, worker, workerVoice, request = null, source, download = null, serial = 0, nextId = 0, playing = false;
+  let audioContext, worker, workerVoice, request = null, source, gain = null, download = null, serial = 0, nextId = 0, playing = false;
+  let ending = null; // the current phrase's «finished» callback, called exactly once
   let status = '', statusVoiceId = '';
   const notify = message => { if (message !== undefined) status = message; for (const fn of listeners) fn(); };
   function stopWorker(error = abortError()) { const old = request; request = null; worker?.terminate(); worker = null; workerVoice = null; if (old) { clearTimeout(old.timer); old.reject(error); } }
-  function cancel({ release = false } = {}) {
+  const finish = () => { const end = ending; ending = null; end?.(); };
+  /**
+   * Stops the voice. `fade` lowers a local voice over 150 ms instead of cutting it;
+   * the browser voice cannot fade, so callers stop it only on the athlete's own action.
+   */
+  function cancel({ release = false, fade = false } = {}) {
     serial++; playing = false; synth()?.cancel();
-    if (source) { try { source.stop(); } catch { /* ended */ } source.disconnect(); source = null; }
+    if (source) {
+      const old = source; const oldGain = gain; source = null; gain = null;
+      const ctx = audioContext;
+      if (fade && oldGain && ctx && typeof oldGain.gain?.linearRampToValueAtTime === 'function') {
+        try { oldGain.gain.setValueAtTime(oldGain.gain.value ?? 1, ctx.currentTime); oldGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.15); old.stop(ctx.currentTime + 0.16); } catch { try { old.stop(); } catch { /* ended */ } }
+        setTimeout(() => { try { old.disconnect(); oldGain.disconnect(); } catch { /* gone */ } }, 220);
+      } else { try { old.stop(); } catch { /* ended */ } old.disconnect(); oldGain?.disconnect?.(); }
+    }
     if (request || release) stopWorker();
+    finish();
   }
   function unlock() {
     try { audioContext ??= makeContext(); if (audioContext.state === 'suspended') audioContext.resume().catch(() => {}); } catch { /* system speech remains available */ }
@@ -39,8 +53,14 @@ export function createTrainerAudio({ store = createVoiceStore(), makeWorker = ()
     });
   }
   const systemSpeak = (text, prefs, personality) => {
-    const service = synth(); if (!service || typeof SpeechSynthesisUtterance === 'undefined') return false;
-    service.speak(configureUtterance(new SpeechSynthesisUtterance(text), prefs, personality, service.getVoices())); return true;
+    const service = synth(); if (!service || typeof SpeechSynthesisUtterance === 'undefined') { finish(); return false; }
+    const utterance = configureUtterance(new SpeechSynthesisUtterance(text), prefs, personality, service.getVoices());
+    const run = serial;
+    const done = () => { if (run === serial) finish(); };
+    utterance.onend = done; utterance.onerror = done;
+    // Some browsers drop «end»: a generous estimate keeps the queue moving.
+    const watchdog = setTimeout(done, 2500 + text.length * 90 / (personality?.voiceRate || 1)); watchdog?.unref?.();
+    service.speak(utterance); return true;
   };
   return {
     get supported() { return Boolean(globalThis.navigator?.storage?.getDirectory && typeof Worker !== 'undefined' && (globalThis.AudioContext || globalThis.webkitAudioContext)); },
@@ -75,9 +95,9 @@ export function createTrainerAudio({ store = createVoiceStore(), makeWorker = ()
       finally { download = null; notify(); }
     },
     async cancelDownload() { const job = download; if (!job) return; job.controller.abort(); try { await job.promise; } catch { /* cancelled */ } },
-    async speak(raw, prefs, personality, { timeoutMs = 45000 } = {}) {
-      const text = String(raw || '').trim().slice(0, 280); if (!text) return false;
-      cancel(); const run = serial; const voice = localVoice(prefs.voiceId);
+    async speak(raw, prefs, personality, { timeoutMs = 45000, onEnd = null } = {}) {
+      const text = String(raw || '').trim().slice(0, 280); if (!text) { onEnd?.(); return false; }
+      cancel(); ending = onEnd; const run = serial; const voice = localVoice(prefs.voiceId);
       statusVoiceId = prefs.voiceId || '';
       if (!voice) return systemSpeak(text, prefs, personality);
       unlock();
@@ -91,11 +111,13 @@ export function createTrainerAudio({ store = createVoiceStore(), makeWorker = ()
         const pcm = new Float32Array(data.pcm);
         if (!pcm.length || pcm.some(n => !Number.isFinite(n)) || !Number.isFinite(data.sampleRate) || data.sampleRate < 8000 || data.sampleRate > 48000) throw new Error('Голос вернул некорректный звук.');
         const buffer = audioContext.createBuffer(1, pcm.length, data.sampleRate); buffer.copyToChannel(pcm, 0);
-        source = audioContext.createBufferSource(); source.buffer = buffer; source.connect(audioContext.destination);
-        source.onended = () => { if (run === serial) { playing = false; source?.disconnect(); source = null; notify('Озвучивание завершено.'); } };
+        source = audioContext.createBufferSource(); source.buffer = buffer;
+        gain = typeof audioContext.createGain === 'function' ? audioContext.createGain() : null;
+        if (gain) { source.connect(gain); gain.connect(audioContext.destination); } else source.connect(audioContext.destination);
+        source.onended = () => { if (run === serial) { playing = false; source?.disconnect(); gain?.disconnect?.(); source = null; gain = null; notify('Озвучивание завершено.'); finish(); } };
         source.start(); notify(`Говорит ${voice.name}`); return true;
       } catch (error) {
-        if (run !== serial || error.name === 'AbortError') return false;
+        if (run !== serial || error.name === 'AbortError') { if (run === serial) finish(); return false; }
         playing = false; stopWorker(); notify(`${error.message} Используем системный голос.`);
         return systemSpeak(text, prefs, personality);
       }

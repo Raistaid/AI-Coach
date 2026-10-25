@@ -3,14 +3,23 @@
 // route and a reply, but code validates every id and number; without the LLM a
 // keyword matcher does the job. Pure functions, unit-tested in planner.test.mjs.
 
-// Foundation first: balance before strength before the ball.
-const ORDER = ['balance', 'squats', 'football'];
+// Foundation first: balance, then strength, then cardio, the ball last.
+const ORDER = ['balance', 'squats', 'lunges', 'plank', 'pushups', 'jacks', 'highknees', 'football'];
+// \b does not see Cyrillic letters, so word edges are written with \p{L} look-arounds.
+const LEGS = '(?<!\\p{L})ног(?:и|ам|ами|ах|у)?(?!\\p{L})';
 const KEYWORDS = {
   balance: /баланс|равновес|устойчив|пада|качает|шата|координац|одной ноге|на одной/,
-  // \b does not see Cyrillic letters, so word edges are written with \p{L} look-arounds.
-  squats: /присед|(?<!\p{L})ног(?:и|ам|ами|ах|у)?(?!\p{L})|(?<!\p{L})сил(?:у|ы|а|ьн)|бедр|ягодиц|вынослив|укреп|окреп/u,
+  squats: new RegExp(`присед|${LEGS}|бедр|ягодиц|укреп|окреп`, 'u'),
+  lunges: new RegExp(`выпад|${LEGS}|ягодиц`, 'u'),
+  plank: /планк|пресс|(?<!\p{L})кор(?:а|у)?(?!\p{L})|корпус|(?<!\p{L})живот|(?<!\p{L})спин(?:а|у|ы|ой)?(?!\p{L})|осанк/u,
+  pushups: /отжим|(?<!\p{L})рук(?:и|ам|ами|ах|у)?(?!\p{L})|груд|трицепс|плеч/u,
+  jacks: /звездочк|прыж|прыга|разогр|размин|кардио/u,
+  highknees: /(?<!\p{L})бег(?:а|ом|ать)?(?!\p{L})|колен\p{L}* (вверх|выше)|высок\p{L}* колен|вынослив|похуд|(?<!\p{L})жир|скорост|быстр\p{L}* ног/u,
   football: /чекан|мяч|футб|набив|жонгл|подъ[её]м|стоп(?:ой|у|а|ы)(?!\p{L})|удар/u,
 };
+// «Сила» alone means legs first; «сильные руки» goes to the arms.
+const STRENGTH = /(?<!\p{L})сил(?:у|ы|а|ьн)/u;
+const STRENGTH_SKILLS = ['squats', 'lunges', 'plank', 'pushups'];
 const BEGINNER = /с нуля|новичок|никогда|первый раз|не умею/;
 export const MAX_PLAN = 3;
 
@@ -44,7 +53,10 @@ export function planReplyText(plan, skills) {
     return `Для этого подойдёт «${s.name}»: ${s.tagline.toLowerCase()}. ${steps(s.lessons.length)}, около ${minutes(s.minutes)}.`;
   }
   const list = picked.map((s, i) => `${i + 1}. ${s.name}`).join(' → ');
-  const why = picked[0].id === 'balance' ? 'устойчивость нужна раньше, чем удар по мячу.' : picked[0].id === 'squats' ? 'сильные ноги держат ритм касаний.' : 'идём от простого к сложному.';
+  const first = picked[0];
+  const why = first.id === 'balance' ? 'устойчивость нужна раньше, чем удар по мячу.'
+    : first.category === 'strength' ? 'сила ног и корпуса держит технику.'
+    : first.category === 'cardio' ? 'разогрев и выносливость нужны в любом движении.' : 'идём от простого к сложному.';
   return `Собрал маршрут из ${picked.length} навыков: ${list}. Начнём с «${picked[0].name}»: ${why}`;
 }
 
@@ -53,6 +65,7 @@ export function keywordPlan(message, skills) {
   const q = normalize(message);
   const ids = byId(skills);
   const matched = ORDER.filter(id => ids.has(id) && KEYWORDS[id].test(q));
+  if (STRENGTH.test(q) && ids.has('squats') && !matched.some(id => STRENGTH_SKILLS.includes(id))) matched.splice(ORDER.indexOf('squats') <= 0 ? 0 : matched.filter(id => ORDER.indexOf(id) < ORDER.indexOf('squats')).length, 0, 'squats');
   if (matched.includes('football') && !matched.includes('balance') && ids.has('balance') && BEGINNER.test(q)) matched.unshift('balance');
   const plan = matched.slice(0, MAX_PLAN);
   return { ok: true, plan, reply: planReplyText(plan, skills), source: 'keywords', reason: '' };

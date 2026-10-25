@@ -1,8 +1,12 @@
 // Keepie-uppie (чеканка). Flagship skill: lessons gated by real observations,
-// situational rules and a phrase bank per coach personality.
-// Every rule reads only numbers produced by the vision layer.
+// a ball tracker for touches and drops, and remarks about the lift, the support
+// knee, the torso and the arms, confirmed over several lifts before they are said.
+import { stanceLesson, REP_MARKS } from './common.js';
+import { confirmByReps } from '../coach-motion.js';
+import { puppet, wave, standHip, SIZE } from './puppet.js';
 
 const STANCE_SECONDS = 3;
+const STREAK_MARKS = [3, 5, 10, 15, 20, 30, 50];
 
 // A streak counts for a series lesson only from the moment the lesson started:
 // touches made during the previous step are not re-used.
@@ -13,38 +17,88 @@ function streakProgress(ball, memo) {
   return { progress: best, memo: { baseline, best } };
 }
 
+/** Front view: a light lift of one foot (0..1) and the arms out for balance. */
+function footballPose(lift, { aspect, side = 1, high = false, armsIn = false }) {
+  const size = SIZE;
+  const thigh = (high ? 95 : 42) * lift; const shin = -(high ? 20 : 55) * lift;
+  const legs = [{ thigh: 3, shin: 3 }, { thigh: 3, shin: 3 }];
+  legs[side] = { thigh: 3 + thigh, shin: 3 + shin, plane: 'sagittal' };
+  const arm = armsIn ? { upper: 6, fore: 4 } : { upper: 28, fore: 34 };
+  const bob = 0.004 * Math.sin(lift * Math.PI);
+  return puppet({ aspect, size, hip: { x: 0.5 * aspect, y: standHip(size) - 0.006 + bob }, legs, arms: [arm, arm] });
+}
+
 export default {
   id: 'football',
   name: 'Чеканка мяча',
+  short: 'Чеканка',
   emoji: '⚽',
+  category: 'football',
   level: 'Новичок',
   minutes: 10,
   needsBall: true,
   goal: 'Учусь чеканить мяч',
   tagline: 'От стойки до серии касаний',
-  camera: 'Телефон на земле у стены, 2–3 метра, видно всё тело и мяч.',
+  camera: 'Телефон на земле у стены в 2–3 метрах, лицом к нему. Видно всё тело и мяч.',
   description: 'Шесть шагов: стойка, подъёмы без мяча, первое касание и серии. Тренер переводит дальше только по тому, что реально видит.',
   metric: {
-    key: 'touches', label: 'Касания мяча',
-    fallbackKey: 'lifts', fallbackLabel: 'Подъёмы стопы',
+    key: 'touches', label: 'касаний', forms: ['касание', 'касания', 'касаний'], progress: 'Лучшая серия', fallbackProgress: 'Подъёмы стопы', rhythmWords: ['касания', 'касаниями'], fallbackRhythmWords: ['подъёмы стопы', 'подъёмами'],
+    fallbackKey: 'lifts', fallbackLabel: 'подъёмов стопы', fallbackForms: ['подъём стопы', 'подъёма стопы', 'подъёмов стопы'],
     fallbackNote: 'Мяч не виден: считаем подъёмы стопы, не касания.',
   },
+  view(f) { return f.legVisible[0] && f.legVisible[1] ? null : 'show-feet'; },
+
+  measure({ f, feet, still }, memo = { count: 0, clean: 0, lift: null }) {
+    const m = { ...memo };
+    let event = null; let milestone = null;
+    if (feet.raised) {
+      const lift = m.lift || { maxTilt: 0, minSupport: 180, spread: false };
+      m.lift = { maxTilt: Math.max(lift.maxTilt, f.tilt), minSupport: Math.min(lift.minSupport, feet.supportKnee ?? 180), spread: lift.spread || feet.armsSpread };
+    }
+    if (feet.liftCompleted) {
+      const lift = m.lift || { maxTilt: f.tilt, minSupport: 180, spread: feet.armsSpread };
+      const errors = [];
+      if (feet.liftHigh) errors.push('lift-high');
+      if (f.facing < 0.45 && lift.minSupport > 174) errors.push('support-knee'); // a knee bend is visible only side-on
+      if (lift.maxTilt > 28) errors.push('torso');
+      if (!lift.spread) errors.push('arms-closed');
+      m.count += 1; if (!errors.length) m.clean += 1;
+      event = { type: 'rep', errors, clean: !errors.length };
+      if (REP_MARKS.includes(m.count)) milestone = { tag: 'lift-done', vars: { lifts: m.count } };
+      m.lift = null;
+    }
+    return { memo: m, event, milestone, activity: Boolean(feet.raised || feet.liftCompleted), ready: still && !feet.raised, counts: { reps: m.count, clean: m.clean } };
+  },
+
+  /** Ball cues: drops, first touch, streak milestones, a ball kicked sideways, a missing ball. */
+  cues({ ball, lesson, now }, cues, memo = { sides: [] }) {
+    const next = { ...memo };
+    const observed = [];
+    const ballStep = Boolean(lesson?.needsBall);
+    let list = ballStep ? cues.filter(c => c.tag !== 'lift-done') : [...cues];
+    if (ball.event === 'drop') { list.push({ kind: 'attempt', tag: 'ball-drop', once: true, priority: 3, vars: { streak: ball.lastStreak } }); observed.push('ball-drop'); }
+    if (ball.event === 'touch') {
+      if (ball.touches === 1) list.push({ kind: 'praise', tag: 'ball-touch', vars: { touches: 1 } });
+      else if (STREAK_MARKS.includes(ball.streak)) list.push({ kind: 'praise', tag: 'ball-streak', vars: { streak: ball.streak } });
+      const check = confirmByReps(next.sides, ball.awayFromBody ? ['ball-side'] : []);
+      next.sides = check.history;
+      if (ball.awayFromBody) observed.push('ball-side');
+      if (check.confirmed.includes('ball-side') && ball.awayFromBody) list.push({ kind: 'error', tag: 'ball-side', once: true, priority: 2 });
+    }
+    if (ballStep && !ball.seen && now - (Number.isFinite(ball.lastSeenAt) ? ball.lastSeenAt : -Infinity) > 4000) list.push({ kind: 'error', tag: 'ball-missing', priority: 2 });
+    return { cues: list, memo: next, observed };
+  },
+
   lessons: [
-    {
-      id: 'stance', title: 'Стойка', short: 'Стойка', target: STANCE_SECONDS, unit: 'с',
+    stanceLesson({
+      seconds: STANCE_SECONDS, title: 'Стойка', short: 'Стойка',
       goal: 'Стой устойчиво 3 секунды, колени мягкие',
       intro: {
         strict: 'Шаг 1: стойка. Ноги на ширине плеч, колени мягкие, стой спокойно 3 секунды.',
         fun: 'Шаг 1: стойка! Ноги на ширине плеч, колени чуть согнуты, замри на 3 секунды.',
         calm: 'Шаг 1: стойка. Встань удобно, слегка согни колени и постой спокойно 3 секунды.',
       },
-      update({ obs, now }, memo = {}) {
-        const good = obs.quality === 'good' && obs.standingStill;
-        if (!good) return { progress: 0, memo: { since: null } };
-        const since = memo.since ?? now;
-        return { progress: Math.min(STANCE_SECONDS, (now - since) / 1000), memo: { since } };
-      },
-    },
+    }),
     {
       id: 'lifts', title: 'Подъёмы без мяча', short: 'Подъёмы', target: 6, unit: '',
       goal: 'Сделай 6 невысоких подъёмов стопы',
@@ -53,8 +107,9 @@ export default {
         fun: 'Шаг 2: мяч пока отдыхает. Шесть лёгких подъёмов стопы, как будто чеканишь воздух!',
         calm: 'Шаг 2: пока без мяча. Сделай шесть невысоких подъёмов стопы, не спеша.',
       },
-      update({ obs }, memo = { count: 0 }) {
-        const count = (memo.count || 0) + (obs.liftCompleted && !obs.liftHigh ? 1 : 0);
+      update({ motion }, memo = { count: 0 }) {
+        const event = motion?.event;
+        const count = (memo.count || 0) + (event?.type === 'rep' && !event.errors.includes('lift-high') ? 1 : 0);
         return { progress: count, memo: { count } };
       },
     },
@@ -102,21 +157,41 @@ export default {
       update({ ball }, memo) { return streakProgress(ball, memo); },
     },
   ],
-  // Ordered by priority. The first matching rule wins. `urgent` bypasses the
-  // cooldown; `kind` drives the styling in the feed.
-  rules: [
-    { tag: 'ball-drop', kind: 'warning', urgent: true, when: ({ ball }) => ball.event === 'drop' },
-    { tag: 'ball-streak', kind: 'success', when: ({ ball }) => ball.event === 'touch' && ball.streak >= 3 && ball.streak % 5 === 0 },
-    { tag: 'ball-touch', kind: 'success', when: ({ ball }) => ball.event === 'touch' },
-    { tag: 'lift-high', kind: 'tip', when: ({ obs }) => obs.raised && obs.liftHigh },
-    { tag: 'support-knee', kind: 'tip', when: ({ obs }) => obs.raised && obs.supportKnee !== null && obs.supportKnee > 175 },
-    { tag: 'torso', kind: 'tip', when: ({ obs }) => obs.torsoTilt > 0.55 },
-    { tag: 'arms-closed', kind: 'tip', when: ({ obs }) => obs.raised && !obs.armsSpread },
-    { tag: 'ball-side', kind: 'tip', when: ({ ball, obs }) => ball.seen && ball.awayFromBody },
-    { tag: 'ball-missing', kind: 'tip', when: ({ lesson, ball }) => Boolean(lesson?.needsBall) && !ball.seen },
-    { tag: 'lift-done', kind: 'success', when: ({ obs, ball }) => obs.liftCompleted && !ball.seen },
-    { tag: 'start', kind: 'tip', when: () => true },
-  ],
+
+  errors: {
+    'lift-high': { label: 'Стопа поднималась выше колена', advice: 'Делай удар короче: мяч до пояса, стопа не выше колена.', priority: 3 },
+    'support-knee': { label: 'Опорная нога была прямой', advice: 'Чуть сгибай опорное колено, оно гасит качание.', priority: 2 },
+    torso: { label: 'Корпус заваливался', advice: 'Держи плечи над тазом и смотри на мяч.', priority: 2 },
+    'arms-closed': { label: 'Руки прижаты к телу', advice: 'Разводи руки в стороны, это балансир.', priority: 1 },
+    'ball-side': { label: 'Мяч уходил в сторону', advice: 'Бей серединой подъёма, носок на себя.', priority: 2 },
+    'ball-drop': { label: 'Частые потери мяча', advice: 'Начинай с одного касания и ловли, потом серии.', priority: 3 },
+    'ball-missing': { label: 'Мяч часто не был виден', advice: 'Больше света и мяч перед собой, ближе к центру кадра.', priority: 2 },
+  },
+
+  result: (m) => (m.ballEverSeen ? { key: 'touches', value: m.touches, label: 'касаний' } : { key: 'lifts', value: m.lifts, label: 'подъёмов стопы' }),
+  summaryLine: (m) => `Мяч ${m.ballSeen ? 'виден' : 'не виден'}. Касаний: ${m.touches}, серия сейчас: ${m.streak}, лучшая серия: ${m.bestStreak}, потерь мяча: ${m.drops}. Подъёмов стопы без мяча: ${m.lifts}.`,
+  answer: (m) => (m.ballEverSeen
+    ? `Засчитано касаний: ${m.touches}. Лучшая серия: ${m.bestStreak}.${m.ballSeen ? '' : ' Сейчас мяч не виден.'}`
+    : `Подъёмов стопы: ${m.lifts}. Мяч ещё не распознан, поэтому касания не считаются.`),
+  rhythm: 'touches',
+
+  demo(t, aspect) {
+    if (t < 4) return { points: footballPose(0, { aspect }) };
+    if (t < 14) {
+      // Light lifts; the fourth and fifth go too high, so the coach remarks on it.
+      const k = Math.floor((t - 4) / 1.5); const at = ((t - 4) % 1.5) / 1.5;
+      return { points: footballPose(wave(at, { down: 0.3, hold: 0.1 }), { aspect, side: k % 2, high: k === 3 || k === 4 }) };
+    }
+    // With the ball: the foot meets it every 1.3 s, the ball bounces between the foot and the waist.
+    const at = ((t - 14) % 1.3) / 1.3;
+    const lift = wave(at, { down: 0.18, hold: 0.04 });
+    const points = footballPose(lift * 0.8, { aspect, side: 1 });
+    const foot = points[32];
+    const bounce = Math.sin(Math.PI * at);
+    const ball = [{ x: foot.x + 0.012, y: foot.y - 0.05 - bounce * 0.2, w: 0.07, h: 0.07 * aspect / 0.5625, score: 0.9 }];
+    return { points, ball };
+  },
+
   phrases: {
     'ball-drop': {
       strict: ['Мяч упал. Подними и начни серию заново. Было {streak}.', 'Потерял мяч. Короче удар, носок на себя.', 'Упал. Смотри на мяч до самого касания.', 'Серия прервана на {streak}. Снова, спокойнее.', 'Мяч на земле. Подброс руками и заново.'],
@@ -168,7 +243,7 @@ export default {
       fun: ['Подъём {lifts}! Воздух отчеканен.', 'Есть! Ещё один такой же.', 'Красивый подъём. Мяч бы оценил!', 'Подъём {lifts}, ритм хороший.', 'Так, так, вижу движение. Продолжай!'],
       calm: ['Вижу подъём и возврат стопы. Всего {lifts}.', 'Подъём засчитан. Продолжай невысоко.', 'Хорошо. Ещё один такой же подъём.', 'Подъём {lifts}. Сохраняй равновесие.', 'Получилось. Следующий в том же темпе.'],
     },
-    start: {
+    'football-idle': {
       strict: ['Стой устойчиво. Начни с одного подъёма стопы.', 'Жду движение. Один невысокий подъём.', 'Ноги видны. Начинай.', 'Готов. Подброс руками и одно касание.', 'Начни. Невысокий подъём стопы.'],
       fun: ['Вижу тебя целиком. Поехали!', 'Всё в кадре. Покажи первый подъём стопы!', 'Готов? Один лёгкий подъём, и мы в игре.', 'Ноги видны, мяч рядом? Начинаем!', 'Жду твоё первое движение.'],
       calm: ['Ноги видны. Начни с одного невысокого подъёма стопы.', 'Всё в кадре. Начинай, когда будешь готов.', 'Можно начинать: один невысокий подъём.', 'Я тебя вижу. Попробуй первое движение.', 'Готово к тренировке. Начни спокойно.'],

@@ -17,10 +17,9 @@ export function answerTrainingQuestion(raw, snapshot = {}) {
     return reply(names.length ? `Детектор сейчас отмечает: ${names.join(', ').toLowerCase()}. Распознавание может ошибаться.` : 'Сейчас детектор не отмечает предметы. Проверь, включён ли он, и добавь света.');
   }
   if (/сколько|результат|сери[яюи]|сч[её]т|повтор(?:ов|а|ы)?(?:[^\p{L}]|$)/u.test(q)) {
-    if (skill.id === 'football') return snapshot.ballEverSeen
-      ? reply(`Засчитано касаний: ${number(snapshot.touches)}. Лучшая серия: ${number(snapshot.bestStreak)}.${snapshot.ballSeen ? '' : ' Сейчас мяч не виден.'}`)
-      : reply(`Подъёмов стопы: ${number(snapshot.lifts)}. Мяч ещё не распознан, поэтому касания не считаются.`);
-    return skill.id === 'squats' ? reply(`Засчитано повторов: ${number(snapshot.reps)}.`) : reply(`Лучшее непрерывное удержание: ${number(snapshot.balanceSeconds)} с.`);
+    const counts = Object.fromEntries(['touches', 'bestStreak', 'lifts', 'reps', 'clean', 'left', 'right', 'hold', 'bestHold'].map(key => [key, number(snapshot[key])]));
+    if (!snapshot.bestHold && snapshot.balanceSeconds) counts.bestHold = number(snapshot.balanceSeconds);
+    return reply(skill.answer({ ...counts, ballSeen: Boolean(snapshot.ballSeen), ballEverSeen: Boolean(snapshot.ballEverSeen) }));
   }
   if (/мяч.*(не.*вид|не.*счит)|почему.*не.*счит/.test(q)) return reply('Касание считается по развороту траектории распознанного мяча рядом со стопой. Покажи мяч целиком, добавь света и держи его перед собой.');
   if (snapshot.quality === 'missing' || snapshot.quality === 'partial') return reply('Сейчас тело видно не полностью. Поставь телефон так, чтобы плечи, колени и стопы оставались в кадре. После этого смогу подсказать по движению.');

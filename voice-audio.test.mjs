@@ -94,3 +94,17 @@ test('aborted fetch and unavailable storage are handled without a false ready st
   const unavailable = createVoiceStore({ getDirectory: async () => { throw new Error('storage denied'); } });
   assert.equal(await unavailable.has(tinyVoice), false); await assert.rejects(unavailable.download(tinyVoice), /storage denied/);
 });
+test('the end of a phrase is reported once: after playback, after the browser voice, or on cancel', async () => {
+  const h = harness(); let ended = 0;
+  const result = h.audio.speak('Раз', { voiceId: voice.id }, personality, { onEnd: () => { ended += 1; } }); await tick();
+  h.reply(); await result;
+  assert.equal(ended, 0, 'still playing');
+  h.sources[0].onended(); assert.equal(ended, 1);
+  h.audio.cancel(); assert.equal(ended, 1, 'no second report');
+  let systemEnded = 0;
+  await h.audio.speak('Два', { voiceId: 'milena' }, personality, { onEnd: () => { systemEnded += 1; } });
+  h.spoken.at(-1).onend(); assert.equal(systemEnded, 1);
+  let cancelled = 0;
+  const pending = h.audio.speak('Три', { voiceId: voice.id }, personality, { onEnd: () => { cancelled += 1; } }); await tick();
+  h.audio.cancel({ fade: true }); assert.equal(await pending, false); assert.equal(cancelled, 1);
+});

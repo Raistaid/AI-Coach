@@ -2,7 +2,7 @@
 // It only ever receives a numeric summary of the session, never frames.
 // Every reply is validated by code; on failure the rule-based phrase is used.
 import { PERSONALITIES, personalityId } from './skills/common.js';
-import { getSkill } from './skills/index.js';
+import { getSkill, SKILL_LIST } from './skills/index.js';
 
 export const WEBLLM_VERSION = '0.2.86';
 export const WEBLLM_URL = `https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@${WEBLLM_VERSION}/+esm`;
@@ -12,11 +12,10 @@ export const LLM_MODELS = {
 };
 export const LIVE_MAX_CHARS = 150;
 export const FINAL_MAX_CHARS = 520;
+// Mistake names come from the catalog: every skill describes its own errors.
 const MISTAKE_LABELS = {
-  'lift-high': 'стопа поднимается слишком высоко', 'support-knee': 'прямая опорная нога', torso: 'наклон корпуса',
-  'arms-closed': 'прижатые руки', 'ball-side': 'мяч уходит в сторону', 'ball-missing': 'мяч не виден камере',
-  'ball-drop': 'потеря мяча', 'squat-torso': 'наклон корпуса в приседе', 'squat-rise': 'задержка внизу',
-  'balance-align': 'наклон корпуса при балансе', 'no-person': 'спортсмен вне кадра', 'show-feet': 'стопы вне кадра',
+  'no-person': 'спортсмен вне кадра', 'show-feet': 'стопы вне кадра',
+  ...Object.fromEntries(SKILL_LIST.flatMap(skill => Object.entries(skill.errors || {}).map(([tag, info]) => [tag, info.label.toLowerCase()]))),
 };
 
 export const supportsWebGPU = () => typeof navigator !== 'undefined' && Boolean(navigator.gpu);
@@ -42,7 +41,7 @@ export function buildSummary(snapshot = {}) {
   const mistake = snapshot.mainMistake || null;
   const n = (v) => (Number.isFinite(v) ? Math.round(v) : 0);
   return {
-    skill: skill.name,
+    skill: skill.name, skillId: skill.id,
     personality: personalityId(snapshot.personality),
     lessonTitle: lesson.title || '',
     lessonIndex: Math.min(n(lesson.index) + 1, n(lesson.total) || 1),
@@ -51,7 +50,8 @@ export function buildSummary(snapshot = {}) {
     lessonsDone: n(snapshot.lessonsDone),
     seconds: n(snapshot.seconds),
     touches: n(snapshot.touches), streak: n(snapshot.streak), bestStreak: n(snapshot.bestStreak), drops: n(snapshot.drops),
-    lifts: n(snapshot.lifts), reps: n(snapshot.reps), balanceSeconds: n(snapshot.balanceSeconds),
+    lifts: n(snapshot.lifts), reps: n(snapshot.reps), clean: n(snapshot.clean), left: n(snapshot.left), right: n(snapshot.right),
+    hold: n(snapshot.hold), bestHold: n(snapshot.bestHold ?? snapshot.balanceSeconds), balanceSeconds: n(snapshot.bestHold ?? snapshot.balanceSeconds),
     ballSeen: Boolean(snapshot.ballSeen),
     visiblePercent: Math.max(0, Math.min(100, n(snapshot.visiblePercent))),
     mainMistake: mistake ? (MISTAKE_LABELS[mistake.tag] || mistake.tag) : '',
@@ -70,13 +70,12 @@ export function allowedNumbers(summary) {
 }
 
 function describeSummary(summary) {
+  const skill = getSkill(summary.skillId);
   const lines = [
     `Навык: ${summary.skill}.`,
     summary.lessonTotal ? `Шаг ${summary.lessonIndex} из ${summary.lessonTotal}: ${summary.lessonTitle}, прогресс ${summary.lessonProgress} из ${summary.lessonTarget}.` : '',
     `Выполнено шагов: ${summary.lessonsDone}. Время тренировки: ${summary.seconds} секунд.`,
-    summary.skill === 'Чеканка мяча' ? `Мяч ${summary.ballSeen ? 'виден' : 'не виден'}. Касаний: ${summary.touches}, серия сейчас: ${summary.streak}, лучшая серия: ${summary.bestStreak}, потерь мяча: ${summary.drops}. Подъёмов стопы без мяча: ${summary.lifts}.` : '',
-    summary.skill === 'Приседания' ? `Повторов: ${summary.reps}.` : '',
-    summary.skill === 'Баланс на одной ноге' ? `Лучшее удержание: ${summary.balanceSeconds} секунд.` : '',
+    skill.summaryLine(summary),
     `Спортсмен был виден ${summary.visiblePercent}% времени.`,
     summary.mainMistake ? `Главная ошибка: ${summary.mainMistake}, замечена ${summary.mistakeCount} раз.` : 'Явных ошибок не замечено.',
   ];

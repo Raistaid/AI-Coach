@@ -17,13 +17,13 @@ test('keyword planner puts balance before football when the ball keeps falling',
 
 test('keyword planner adds balance for a complete beginner and squats for leg strength', () => {
   assert.deepEqual(keywordPlan('никогда не играл, хочу чеканить с нуля', SKILL_LIST).plan, ['balance', 'football']);
-  assert.deepEqual(keywordPlan('Хочу укрепить ноги перед футболом', SKILL_LIST).plan, ['squats', 'football']);
+  assert.deepEqual(keywordPlan('Хочу укрепить ноги перед футболом', SKILL_LIST).plan, ['squats', 'lunges', 'football']);
   assert.deepEqual(keywordPlan('Хочу много узнать', SKILL_LIST).plan, [], '"много" must not match "ноги"');
   assert.deepEqual(keywordPlan('дарова ты шаришь за футбик', SKILL_LIST).plan, ['football'], 'slang for football still finds the skill');
 });
 
 test('an unknown goal yields an empty plan and an honest reply naming the catalog', () => {
-  const r = keywordPlan('Хочу научиться стоять на руках', SKILL_LIST);
+  const r = keywordPlan('Хочу научиться плавать', SKILL_LIST);
   assert.deepEqual(r.plan, []);
   assert.match(r.reply, /пока нет навыка/);
   for (const s of SKILL_LIST) assert.ok(r.reply.includes(s.name));
@@ -39,7 +39,7 @@ test('LLM reply passes when it is JSON with known ids and catalog numbers', () =
 
 test('LLM reply is rejected for invented skills, invented numbers, English, emoji, bad JSON and over-long text', () => {
   assert.equal(parsePlan('{"plan":["handstand"],"reply":"ок"}', SKILL_LIST).reason, 'unknown-skill');
-  assert.equal(parsePlan('{"plan":["football"],"reply":"За 7 дней научишься."}', SKILL_LIST).reason, 'invented-number');
+  assert.equal(parsePlan('{"plan":["football"],"reply":"За 9 дней научишься."}', SKILL_LIST).reason, 'invented-number');
   assert.equal(parsePlan('{"plan":["football"],"reply":"Start with juggling drills"}', SKILL_LIST).reason, 'not-russian');
   assert.equal(parsePlan('{"plan":["football"],"reply":"Поехали ⚽"}', SKILL_LIST).reason, 'emoji');
   assert.equal(parsePlan('просто текст без объекта', SKILL_LIST).reason, 'no-json');
@@ -87,12 +87,24 @@ test('russian plural forms', () => {
 
 test('answers to the coach\'s own question find a skill; Cyrillic word edges hold', () => {
   const plan = (q) => keywordPlan(q, SKILL_LIST).plan;
-  assert.deepEqual(plan('ноги'), ['squats'], 'the coach asks «мяч, ноги или равновесие?»');
+  assert.deepEqual(plan('ноги'), ['squats', 'lunges'], 'the coach asks «мяч, ноги, руки или пресс?»');
   assert.deepEqual(plan('мяч'), ['football']);
   assert.deepEqual(plan('равновесие'), ['balance']);
   assert.deepEqual(plan('хочу силу'), ['squats']);
-  assert.deepEqual(plan('сильные ноги'), ['squats']);
+  assert.deepEqual(plan('сильные ноги'), ['squats', 'lunges']);
   assert.deepEqual(plan('бью стопой'), ['football']);
   assert.deepEqual(plan('хочу много узнать'), [], 'a stem inside another word does not count');
   assert.deepEqual(plan('стоять на одной ноге'), ['balance'], 'one-leg stance is balance, not squats');
+});
+
+test('the new skills are found by their own words and ordered from simple to complex', () => {
+  const plan = (q) => keywordPlan(q, SKILL_LIST).plan;
+  assert.deepEqual(plan('хочу отжиматься'), ['pushups']);
+  assert.deepEqual(plan('хочу накачать пресс'), ['plank']);
+  assert.deepEqual(plan('сильные руки и пресс'), ['plank', 'pushups']);
+  assert.deepEqual(plan('нужна разминка перед игрой'), ['jacks']);
+  assert.deepEqual(plan('хочу улучшить выносливость и бег'), ['highknees']);
+  assert.deepEqual(plan('выпады'), ['lunges']);
+  assert.deepEqual(plan('хочу похудеть, кардио'), ['jacks', 'highknees']);
+  assert.deepEqual(plan('у меня плохая осанка и слабая спина'), ['plank']);
 });

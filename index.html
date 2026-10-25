@@ -46,6 +46,9 @@
     <symbol id="i-fit" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 9h8v6H8z"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
     <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14m-6-6 6 6 6-6"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r=".9"/><circle cx="12" cy="12" r=".9"/><circle cx="19" cy="12" r=".9"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2.5"/></symbol>
+    <symbol id="i-lens" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
   </defs>
 </svg>
@@ -81,7 +84,6 @@
       </div>
       <button id="newChatBtn" class="icon-btn" aria-label="Новый чат"><svg class="ic"><use href="#i-edit"/></svg></button>
     </header>
-    <div id="storiesRow" class="stories" aria-label="Навыки"></div>
     <div class="chat-wrap"><div id="chatList" class="chat-list"></div><button id="chatJump" class="jump-btn" type="button" aria-label="К последним сообщениям" hidden><svg class="ic"><use href="#i-down"/></svg></button></div>
     <div id="chatTyping" class="typing" hidden><span></span><span></span><span></span></div>
     <div id="chatChips" class="chips"></div>
@@ -92,18 +94,16 @@
   </section>
 
   <section class="screen screen-catalog" data-screen="catalog" aria-label="Навыки">
-    <header class="topbar"><div class="topbar-title"><div><strong>Навыки</strong><small>Переход между шагами только по реальным движениям</small></div></div></header>
-    <div id="catalogGrid" class="catalog-grid"></div>
-    <p class="muted-note plain">В каталоге только работающие навыки. Новый навык добавляется одним файлом в <code>skills/</code>.</p>
+    <header class="topbar"><div class="topbar-title"><div><strong>Навыки</strong><small>Шаг засчитывается только по реальному движению</small></div></div></header>
+    <div id="catalogGrid" class="catalog"></div>
   </section>
 
   <section class="screen screen-progress" data-screen="progress" aria-label="Прогресс">
     <header class="topbar"><div class="topbar-title"><div><strong>Прогресс</strong><small>Только то, что увидели модели на устройстве</small></div></div><button id="clearHistory" class="icon-btn" aria-label="Очистить историю"><svg class="ic"><use href="#i-trash"/></svg></button></header>
-    <div class="stats">
-      <div><b id="statTrainings">0</b><span>тренировок</span></div>
-      <div><b id="statMinutes">0</b><span>минут</span></div>
-      <div><b id="statStreak">0</b><span>лучшая серия</span></div>
-      <div><b id="statDays">0</b><span>дней подряд</span></div>
+    <div class="stats three">
+      <div><b id="statTrainings">0</b><span id="statTrainingsLabel">тренировок</span></div>
+      <div><b id="statMinutes">0</b><span id="statMinutesLabel">минут</span></div>
+      <div><b id="statDays">0</b><span id="statDaysLabel">дней подряд</span></div>
     </div>
     <h3 class="section-title">Эфиры</h3>
     <div id="historyList" class="history"></div>
@@ -117,45 +117,52 @@
       <div class="avatar-pick" id="profileAvatars" role="radiogroup" aria-label="Цвет аватара"></div>
     </div>
 
-    <h3 class="section-title">Характер тренера</h3>
-    <div id="personalityRow" class="personalities" role="radiogroup" aria-label="Характер тренера"></div>
+    <h3 class="section-title">Тренер</h3>
+    <div class="group">
+      <div class="row stacked">
+        <div id="personalityRow" class="segmented" role="radiogroup" aria-label="Характер тренера"></div>
+        <small id="personalityNote" class="segmented-note"></small>
+      </div>
+      <label class="row"><span><strong>Голос тренера</strong><small>Озвучивать подсказки</small></span><input id="voiceInput" type="checkbox" class="switch"></label>
+      <label class="row voice-choice"><span><strong>Голос</strong><small id="voiceHint">Голоса браузера и скачиваемые</small></span><select id="coachVoiceSelect" aria-label="Голос тренера"></select></label>
+      <div class="voice-actions">
+        <button id="previewCoachVoice" class="btn-ghost small" type="button">Прослушать</button>
+        <button id="downloadCoachVoice" class="btn-ghost small model-download" type="button" hidden>Скачать голос · 63 МБ</button>
+        <button id="cancelVoiceDownload" class="btn-ghost small" type="button" hidden>Отменить</button>
+      </div>
+      <progress id="voiceDownloadProgress" class="voice-progress" max="1" value="0" aria-label="Скачивание голоса" hidden></progress>
+      <p id="voiceDownloadStatus" class="model-note" role="status"></p>
+    </div>
 
     <h3 class="section-title">Эфир</h3>
     <div class="group">
-    <label class="row"><span><strong>Голос тренера</strong><small>Озвучивать подсказки</small></span><input id="voiceInput" type="checkbox" class="switch"></label>
-    <label class="row voice-choice"><span><strong>Выбрать голос</strong><small id="voiceHint">Голоса загружаются из браузера и системы</small></span><select id="coachVoiceSelect" aria-label="Голос тренера"></select></label>
-    <div class="voice-actions">
-      <button id="downloadCoachVoice" class="btn-ghost small model-download" type="button" hidden>Скачать голос · 63 МБ</button>
-      <button id="previewCoachVoice" class="btn-ghost small" type="button">Прослушать голос</button>
-      <button id="cancelVoiceDownload" class="btn-ghost small" type="button" hidden>Отменить скачивание</button>
-    </div>
-    <progress id="voiceDownloadProgress" class="voice-progress" max="1" value="0" aria-label="Скачивание голоса" hidden></progress>
-    <p id="voiceDownloadStatus" class="model-note" role="status"></p>
-    <label class="row"><span><strong>Звуковые сигналы</strong><small>Касание, шаг урока, ошибка</small></span><input id="soundInput" type="checkbox" class="switch" checked></label>
-    <label class="row"><span><strong>Крупный режим на расстоянии</strong><small>Последняя фраза во весь кадр, когда ты далеко</small></span><input id="autoFarInput" type="checkbox" class="switch" checked></label>
-    <label class="row"><span><strong>Разметка тела</strong><small>Точки и линии поверх видео</small></span><input id="skeletonInput" type="checkbox" class="switch" checked></label>
-    <label class="row"><span><strong>Зеркальное видео</strong><small>Привычный вид с фронтальной камеры</small></span><input id="mirrorInput" type="checkbox" class="switch"></label>
-    <label class="row"><span><strong>Детектор предметов</strong><small>Отмечает людей, мяч, бутылки, стулья и другие знакомые модели предметы. Касания считаются только по мячу.</small></span><input id="objectsInput" type="checkbox" class="switch" checked></label>
-
+      <label class="row"><span><strong>Звуки</strong><small>Щелчок на повторе и сигнал шага</small></span><input id="soundInput" type="checkbox" class="switch" checked></label>
+      <label class="row"><span><strong>Разметка тела</strong><small>Точки и линии поверх видео</small></span><input id="skeletonInput" type="checkbox" class="switch" checked></label>
+      <label class="row"><span><strong>Зеркальное видео</strong><small>Для фронтальной камеры</small></span><input id="mirrorInput" type="checkbox" class="switch"></label>
+      <label class="row"><span><strong>Крупный текст издалека</strong><small>Включается сам, когда ты далеко</small></span><input id="autoFarInput" type="checkbox" class="switch" checked></label>
+      <label class="row"><span><strong>Детектор предметов</strong><small>Мяч и предметы в кадре</small></span><input id="objectsInput" type="checkbox" class="switch" checked></label>
     </div>
 
-    <h3 class="section-title">Локальные модели</h3>
-    <p class="muted-note">Выбери модель и скачай её отдельно. После загрузки она хранится в кеше этого браузера. Нужны интернет, WebGPU и свободное место.</p>
-    <div id="liveCoachBox" class="llm-box">
-      <div class="model-choice" role="radiogroup" aria-label="Локальная модель тренера">
-        <div class="model-card" data-model="default"><label><input type="radio" name="llmModel" value="default" checked><span>Qwen 2.5 · 1.5B<small>Около 1 ГБ · подробнее отвечает</small></span></label><button type="button" class="btn-ghost small model-download" data-download-model="default" aria-label="Скачать Qwen 2.5 1.5B">Скачать</button><p id="modelStatus-default" class="model-status" role="status">Статус ещё не проверен</p><progress id="modelProgress-default" max="1" value="0" hidden aria-label="Загрузка Qwen 2.5 1.5B"></progress></div>
-        <div class="model-card" data-model="small"><label><input type="radio" name="llmModel" value="small"><span>Qwen 2.5 · 0.5B<small>Около 400 МБ · для слабых устройств</small></span></label><button type="button" class="btn-ghost small model-download" data-download-model="small" aria-label="Скачать Qwen 2.5 0.5B">Скачать</button><p id="modelStatus-small" class="model-status" role="status">Статус ещё не проверен</p><progress id="modelProgress-small" max="1" value="0" hidden aria-label="Загрузка Qwen 2.5 0.5B"></progress></div>
+    <details class="group details">
+      <summary class="row"><span><strong>ИИ на устройстве</strong><small>Живой тренер: модель Qwen в браузере</small></span><svg class="ic chevron" aria-hidden="true"><use href="#i-down"/></svg></summary>
+      <div id="liveCoachBox" class="llm-box">
+        <p class="muted-note">Модель скачивается один раз и хранится в браузере. Нужны WebGPU и свободное место.</p>
+        <div class="model-choice" role="radiogroup" aria-label="Локальная модель тренера">
+          <div class="model-card" data-model="default"><label><input type="radio" name="llmModel" value="default" checked><span>Qwen 2.5 · 1.5B<small>Около 1 ГБ · подробнее отвечает</small></span></label><button type="button" class="btn-ghost small model-download" data-download-model="default" aria-label="Скачать Qwen 2.5 1.5B">Скачать</button><p id="modelStatus-default" class="model-status" role="status">Статус ещё не проверен</p><progress id="modelProgress-default" max="1" value="0" hidden aria-label="Загрузка Qwen 2.5 1.5B"></progress></div>
+          <div class="model-card" data-model="small"><label><input type="radio" name="llmModel" value="small"><span>Qwen 2.5 · 0.5B<small>Около 400 МБ · для слабых устройств</small></span></label><button type="button" class="btn-ghost small model-download" data-download-model="small" aria-label="Скачать Qwen 2.5 0.5B">Скачать</button><p id="modelStatus-small" class="model-status" role="status">Статус ещё не проверен</p><progress id="modelProgress-small" max="1" value="0" hidden aria-label="Загрузка Qwen 2.5 0.5B"></progress></div>
+        </div>
+        <button id="cancelModelDownload" type="button" class="text-btn" hidden>Отменить скачивание</button>
+        <p id="liveCoachStatus" class="model-status" role="status">Скачивание и использование модели включаются отдельно.</p>
       </div>
-      <button id="cancelModelDownload" type="button" class="text-btn" hidden>Отменить скачивание</button>
-      <p id="liveCoachStatus" class="model-status" role="status">Скачивание и использование модели включаются отдельно.</p>
-    </div>
+    </details>
+
     <h3 class="section-title">Оформление</h3>
     <div class="group">
-      <label class="row"><span><strong>Тема</strong><small>Как в системе, светлая или тёмная</small></span><select id="themeSelect" aria-label="Тема"><option value="system">Системная</option><option value="light">Светлая</option><option value="dark">Тёмная</option></select></label>
+      <label class="row"><span><strong>Тема</strong></span><select id="themeSelect" aria-label="Тема"><option value="system">Как в системе</option><option value="light">Светлая</option><option value="dark">Тёмная</option></select></label>
     </div>
 
     <button id="logoutBtn" class="btn-ghost danger wide" type="button">Выйти из профиля</button>
-    <p class="muted-note center"><svg class="ic"><use href="#i-lock"/></svg> Профиль и история хранятся на устройстве. Видео не отправляется. Голосовые вопросы распознаёт браузер; аудио может обрабатываться его сервисом.</p>
+    <p class="muted-note center"><svg class="ic"><use href="#i-lock"/></svg> Профиль и история хранятся на устройстве. Видео не отправляется.</p>
   </section>
 
   <nav class="tabbar" aria-label="Разделы">
@@ -203,45 +210,51 @@
       <video id="cameraVideo" autoplay muted playsinline aria-label="Видео с камеры"></video>
       <canvas id="demoCanvas" aria-label="Демонстрационная анимация"></canvas>
       <canvas id="poseCanvas" aria-label="Разметка движений"></canvas>
-      <div class="stage-vignette"></div>
+      <div class="stage-shade" aria-hidden="true"></div>
       <div class="stage-flash" id="stageFlash" aria-hidden="true"></div>
-      <div class="reactions" id="liveReactions" aria-hidden="true"></div>
-      <button id="liveLens" class="lens-pill" type="button" hidden>0.5×</button>
-      <p id="liveDebug" class="live-debug" hidden></p>
+
       <header class="live-top">
-        <span id="liveAvatar" class="avatar small ring"></span>
-        <div class="live-who"><strong id="liveName"></strong><small id="liveCoachName">Спокойный тренер</small></div>
         <span class="live-badge" id="liveBadge">LIVE</span>
         <button class="live-timer" id="liveTimer" type="button" aria-label="Время эфира. Нажми, чтобы показать технические данные">00:00</button>
-        <button id="liveClose" class="icon-btn light" aria-label="Завершить эфир"><svg class="ic"><use href="#i-x"/></svg></button>
+        <button id="liveMore" class="glass-btn" type="button" aria-label="Настройки эфира" aria-haspopup="menu" aria-expanded="false" aria-controls="liveMenu"><svg class="ic"><use href="#i-more"/></svg></button>
       </header>
-      <div class="lesson-hud" id="lessonHud" role="status" aria-live="polite">
-        <div class="lesson-row"><span id="lessonStep">Шаг 1/6</span><strong id="lessonTitle">Стойка</strong><span id="lessonCount">0/3</span></div>
+
+      <div class="lesson-card" id="lessonHud" role="status" aria-live="polite">
+        <div class="lesson-head"><span id="lessonStep">Шаг 1 из 3</span><span id="lessonCount">0/2 с</span></div>
+        <strong id="lessonTitle">Исходное положение</strong>
         <div class="lesson-bar"><div id="lessonBar"></div></div>
         <p id="lessonGoal"></p>
       </div>
-      <div class="live-metrics"><div><b id="liveMetricValue">0</b><span id="liveMetricLabel">касаний</span></div><div><b id="liveSecondValue">0</b><span id="liveSecondLabel">серия</span></div></div>
-      <p id="detectedObjects" class="detected-objects" aria-live="off" hidden></p>
-      <div class="live-rail">
-        <button id="liveAsk" class="rail-btn" aria-label="Спросить тренера" aria-expanded="false" aria-controls="liveQuestionPanel"><svg class="ic"><use href="#i-mic"/></svg><span>Спросить</span></button>
-        <button id="livePause" class="rail-btn" aria-label="Пауза"><svg class="ic"><use href="#i-pause"/></svg><span>Пауза</span></button>
-        <button id="liveFlip" class="rail-btn" aria-label="Переключить камеру"><svg class="ic"><use href="#i-flip"/></svg><span>Камера</span></button>
-        <button id="liveFit" class="rail-btn" aria-label="Масштаб: весь кадр или на весь экран" aria-pressed="true"><svg class="ic"><use href="#i-fit"/></svg><span>Весь кадр</span></button>
-        <button id="liveVoice" class="rail-btn" aria-label="Голос тренера" aria-pressed="true"><svg class="ic"><use href="#i-voice"/></svg><span>Голос</span></button>
-        <button id="liveSkeleton" class="rail-btn" aria-label="Разметка тела" aria-pressed="true"><svg class="ic"><use href="#i-skeleton"/></svg><span>Разметка</span></button>
-        <button id="liveFar" class="rail-btn" aria-label="Крупный режим" aria-pressed="false"><svg class="ic"><use href="#i-expand"/></svg><span>Крупно</span></button>
-        <button id="liveSkip" class="rail-btn" aria-label="Пропустить шаг"><svg class="ic"><use href="#i-skip"/></svg><span>Шаг</span></button>
+      <div class="live-counter" id="liveCounter"><b id="liveMetricValue">0</b><span id="liveMetricLabel">повторов</span></div>
+      <p id="liveDebug" class="live-debug" hidden></p>
+
+      <div class="frame-guide" id="frameGuide" hidden><span class="frame-box" aria-hidden="true"></span><p id="frameGuideText">Встань в кадр целиком</p></div>
+      <div class="coach-line" id="feedbackList" aria-live="polite"></div>
+
+      <nav class="live-controls" aria-label="Управление эфиром">
+        <button id="livePause" class="ctrl" type="button" aria-label="Пауза"><svg class="ic"><use href="#i-pause"/></svg><span>Пауза</span></button>
+        <button id="liveAsk" class="ctrl" type="button" aria-label="Спросить тренера" aria-expanded="false" aria-controls="liveQuestionPanel"><svg class="ic"><use href="#i-mic"/></svg><span>Спросить</span></button>
+        <button id="liveClose" class="ctrl stop" type="button" aria-label="Завершить эфир"><svg class="ic"><use href="#i-stop"/></svg><span>Завершить</span></button>
+      </nav>
+
+      <div id="liveMenu" class="live-menu" role="menu" aria-label="Настройки эфира" hidden>
+        <button id="liveFlip" class="menu-item" role="menuitem" type="button"><svg class="ic"><use href="#i-flip"/></svg><span>Сменить камеру</span></button>
+        <button id="liveLens" class="menu-item" role="menuitemcheckbox" aria-checked="false" type="button" hidden><svg class="ic"><use href="#i-lens"/></svg><span>Широкий угол 0.5×</span></button>
+        <button id="liveFit" class="menu-item" role="menuitemcheckbox" aria-checked="true" type="button"><svg class="ic"><use href="#i-fit"/></svg><span>Весь кадр без обрезки</span></button>
+        <button id="liveVoice" class="menu-item" role="menuitemcheckbox" aria-checked="true" type="button"><svg class="ic"><use href="#i-voice"/></svg><span>Голос тренера</span></button>
+        <button id="liveSkeleton" class="menu-item" role="menuitemcheckbox" aria-checked="true" type="button"><svg class="ic"><use href="#i-skeleton"/></svg><span>Разметка тела</span></button>
+        <button id="liveFar" class="menu-item" role="menuitemcheckbox" aria-checked="false" type="button"><svg class="ic"><use href="#i-expand"/></svg><span>Крупный текст</span></button>
+        <button id="liveSkip" class="menu-item" role="menuitem" type="button"><svg class="ic"><use href="#i-skip"/></svg><span>Пропустить шаг</span></button>
       </div>
-      <div class="live-feed" id="feedbackList" aria-live="polite" aria-relevant="additions"></div>
+
       <section id="liveQuestionPanel" class="live-question" aria-label="Вопрос тренеру" hidden>
-        <div class="question-heading"><strong>Спроси тренера</strong><button id="closeLiveQuestion" type="button" class="icon-btn light" aria-label="Закрыть вопрос"><svg class="ic"><use href="#i-x"/></svg></button></div>
-        <p class="question-privacy">Речь распознаёт браузер: аудио может отправляться его сервису. Приложение не сохраняет аудиозапись.</p>
-        <form id="liveQuestionForm"><input id="liveQuestionInput" maxlength="250" placeholder="Например: что делать сейчас?" aria-label="Вопрос тренеру" autocomplete="off"><button id="liveQuestionSend" type="submit" class="btn-primary small" aria-label="Отправить вопрос"><svg class="ic"><use href="#i-send"/></svg></button></form>
+        <div class="question-heading"><strong>Вопрос тренеру</strong><button id="closeLiveQuestion" type="button" class="glass-btn small" aria-label="Закрыть вопрос"><svg class="ic"><use href="#i-x"/></svg></button></div>
+        <form id="liveQuestionForm"><input id="liveQuestionInput" maxlength="250" placeholder="Например: что делать сейчас?" aria-label="Вопрос тренеру" autocomplete="off"><button id="liveQuestionSend" type="submit" class="send-btn small" aria-label="Отправить вопрос"><svg class="ic"><use href="#i-send"/></svg></button></form>
         <button id="liveQuestionMic" class="btn-ghost light small" type="button" aria-pressed="false"><svg class="ic"><use href="#i-mic"/></svg><span>Сказать вопрос</span></button>
-        <p id="liveQuestionStatus" class="question-status" role="status">Можно спросить голосом или написать. Микрофон включается по нажатию.</p>
+        <p id="liveQuestionStatus" class="question-status" role="status">Голос распознаёт браузер: аудио может уйти его сервису. Запись не сохраняется.</p>
         <p id="liveQuestionReply" class="question-reply" aria-live="polite" hidden></p>
       </section>
-      <div class="stage-hint" id="stageHint"></div>
+
       <div class="far-overlay" id="farOverlay" aria-hidden="true"><p class="far-step" id="farStep"></p><p class="far-text" id="farText"></p></div>
       <div class="loading-cover" id="loadingCover" hidden><div class="orbit"></div><h3>Готовим тренера</h3><p id="loadingText">Загружаем модели позы и предметов…</p></div>
       <div class="live-error" id="liveError" hidden>

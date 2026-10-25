@@ -6,12 +6,13 @@ import {
 } from './coach-engine.js';
 import { SKILL_LIST, PERSONALITIES } from './skills/index.js';
 import { COMMON_PHRASES, pickPhrase, fillTemplate } from './skills/common.js';
+import { squatPose } from './skills/squats.js';
 
 /* ───────────── fixtures ───────────── */
 function pose() {
   const p = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.4, z: 0, visibility: 0.99, presence: 0.99 }));
   for (const [index, x, y] of [
-    [11, .44, .20], [12, .56, .20], [13, .38, .33], [14, .62, .33], [15, .34, .44], [16, .66, .44],
+    [11, .44, .20], [12, .56, .20], [13, .36, .32], [14, .64, .32], [15, .27, .42], [16, .73, .42],
     [23, .46, .46], [24, .54, .46], [25, .46, .66], [26, .54, .66],
     [27, .46, .88], [28, .54, .88], [31, .46, .92], [32, .54, .92],
   ]) Object.assign(p[index], { x, y });
@@ -33,11 +34,13 @@ const ball = (y, x = .54) => [{ x, y, w: .08, h: .08, score: .8 }];
 class Sim {
   constructor(skill = 'football', personality = 'calm') {
     this.skill = skill; this.pose = createPoseState(); this.ball = createBallState();
-    this.session = createSession(skill, { personality }); this.t = 0; this.log = [];
+    this.session = createSession(skill, { personality }); this.t = 0; this.log = []; this.events = [];
   }
   frame(points, detections = [], dt = 100) {
-    const observed = observePose(points, this.pose, this.t, 1, this.skill); this.pose = observed.state;
-    this.ball = trackBall(detections, this.ball, this.t, observed.obs, 1);
+    const aspect = this.aspect || 1;
+    const observed = observePose(points, this.pose, this.t, aspect, this.skill); this.pose = observed.state;
+    if (observed.obs.motion?.event) this.events.push(observed.obs.motion.event);
+    this.ball = trackBall(detections, this.ball, this.t, observed.obs, aspect);
     const stepped = stepSession(this.session, observed.obs, this.ball, this.t); this.session = stepped.session;
     if (stepped.feedback) this.log.push(stepped.feedback);
     this.t += dt; this.last = stepped; this.obs = observed.obs;
@@ -66,30 +69,38 @@ test('portrait normalization preserves the same physical knee angle', () => {
   assert.ok(Math.abs(jointAngle(...portrait, aspect) - jointAngle(...points)) < 1e-8);
 });
 
-test('missing person is reported, never counted, and warns immediately', () => {
+test('missing person is never counted; the warning comes only after it lasts', () => {
   const sim = new Sim();
   const r = sim.frame(null);
   assert.equal(r.metrics.visible, false);
   assert.equal(r.metrics.lifts, 0);
-  assert.ok(['lesson-intro', 'no-person'].includes(r.feedback.tag));
-  sim.frames(null, 25);
-  assert.ok(sim.tags().includes('no-person'), 'a warning follows within the cooldown window');
+  assert.equal(r.feedback.tag, 'lesson-intro', 'the first step is announced right away');
+  sim.frames(null, 10);
+  assert.ok(!sim.tags().includes('no-person'), 'one second out of view is not worth a remark');
+  sim.frames(null, 20);
+  assert.ok(sim.tags().includes('no-person'), 'after 1.5 s (and a pause after the intro) the coach says it');
+  sim.frames(null, 600);
+  assert.ok(sim.tags().filter(t => t === 'no-person').length <= 3, 'then the screen keeps showing it, the voice stops');
 });
 
 test('hidden feet are partial visibility with no movement claims', () => {
   const sim = new Sim(); sim.stance();
   const p = pose(); p[27].visibility = .2;
-  const first = sim.frame(p); const r = sim.frame(p);
+  const r = sim.frame(p);
   assert.equal(sim.obs.quality, 'partial');
+  assert.equal(sim.obs.framing, 'show-feet');
   assert.equal(r.metrics.visible, false);
-  assert.equal(first.feedback?.tag, 'show-feet', 'leaving good view warns immediately');
-  assert.equal(r.metrics.lifts, 0);
+  sim.frames(p, 30);
+  assert.ok(sim.tags().includes('show-feet'), 'a lasting problem is said');
+  assert.equal(sim.last.metrics.lifts, 0);
 });
 
 test('low-confidence shoulder cannot drive posture guidance', () => {
   const p = pose(); p[11].visibility = .1; p[11].x = .95;
   const { obs } = observePose(p, createPoseState(), 0);
-  assert.notEqual(obs.quality, 'good');
+  assert.ok(obs.tilt < 5, 'the unreliable point is ignored, the other side anchors the torso');
+  const q = pose(); for (const i of [11, 12]) q[i].visibility = .1;
+  assert.notEqual(observePose(q, createPoseState(), 0).obs.quality, 'good', 'no shoulders, no torso');
 });
 
 test('standing and a held lifted foot cannot inflate lift counts', () => {
@@ -136,22 +147,30 @@ test('observation does not mutate prior state or landmark coordinates', () => {
   assert.deepEqual(state, before); assert.deepEqual(p, pointsBefore);
 });
 
-test('squat requires full stand-lower-stand with two-frame hysteresis', () => {
-  const sim = new Sim('squats');
-  sim.frames(pose(), 2); sim.frames(crouched(), 2);
-  assert.equal(sim.obs.squat.phase, 'lowered');
-  assert.equal(sim.last.metrics.reps, 0);
-  sim.t += 800; sim.frame(pose());
-  assert.equal(sim.last.metrics.reps, 0);
-  sim.frame(pose());
+test('squat counts stand-lower-stand on the athlete\'s own scale; a shallow dip is an attempt', () => {
+  const sim = new Sim('squats'); const aspect = 9 / 16; sim.aspect = aspect;
+  sim.frames(squatPose(0, { aspect }), 25);
+  assert.ok(describeLesson(sim.session).index >= 1, 'standing still completes the stance and calibrates');
+  for (const p of [.3, .7, 1, 1, .7, .3, 0, 0, 0]) sim.frame(squatPose(p, { aspect }));
   assert.equal(sim.last.metrics.reps, 1);
-  sim.frames(pose(), 10);
-  assert.equal(sim.last.metrics.reps, 1);
+  for (const p of [.3, .55, .55, .3, 0, 0, 0]) sim.frame(squatPose(p, { aspect }));
+  assert.equal(sim.last.metrics.reps, 1, 'half a squat is not counted');
+  assert.ok(sim.events.some(e => e.type === 'attempt' && e.errors.includes('squat-attempt')));
+  sim.frames(squatPose(0, { aspect }), 20);
+  assert.equal(sim.last.metrics.reps, 1, 'standing still adds nothing');
 });
 
 test('starting crouched then standing is not a repetition', () => {
-  const sim = new Sim('squats');
-  sim.frames(crouched(), 2); sim.t += 800; sim.frames(pose(), 2);
+  const sim = new Sim('squats'); const aspect = 9 / 16; sim.aspect = aspect;
+  sim.frames(squatPose(1, { aspect }), 6); sim.frames(squatPose(0, { aspect }), 6);
+  assert.equal(sim.last.metrics.reps, 0);
+});
+
+test('walking toward the camera is not a squat', () => {
+  const sim = new Sim('squats'); const aspect = 9 / 16; sim.aspect = aspect;
+  sim.frames(squatPose(0, { aspect }), 25);
+  // The whole body grows and moves down the frame, the legs stay straight.
+  for (let k = 0; k < 12; k++) sim.frame(squatPose(0, { aspect }).map(p => ({ ...p, y: .5 + (p.y - .5) * (1 + k * .02) + k * .004 })));
   assert.equal(sim.last.metrics.reps, 0);
 });
 
@@ -206,8 +225,9 @@ test('stance lesson completes only after holding still, then the next lesson is 
   sim.frames(pose(), 30);
   assert.equal(describeLesson(sim.session).index, 1);
   assert.deepEqual(sim.session.completedLessons, ['stance']);
-  const tags = sim.tags();
-  assert.ok(tags.indexOf('lesson-complete') < tags.lastIndexOf('lesson-intro'));
+  const done = sim.log.find(f => f.tag === 'lesson-complete');
+  assert.match(done.text, /Шаг 2/, 'one message closes the step and introduces the next');
+  assert.equal(sim.tags().filter(t => t === 'lesson-intro').length, 1, 'no separate intro right after');
 });
 
 test('lift lesson needs six low lifts; high lifts do not count towards it', () => {
@@ -252,30 +272,31 @@ test('ball-dependent lesson asks for the ball when none is visible', () => {
   assert.ok(sim.tags().includes('ball-missing'));
 });
 
-test('balance lesson progresses with held seconds and squats with reps', () => {
+test('balance lesson progresses with held seconds; a lean stops the clock', () => {
   const balance = new Sim('balance');
   balance.frames(pose(), 4);
   const up = pose(); up[28].y = .75; up[32].y = .79;
   for (let i = 0; i < 25; i++) balance.frame(up);
-  assert.equal(balance.obs.balanceSeconds >= 1, true);
+  assert.ok(balance.last.metrics.bestHold >= 1);
   assert.ok(describeLesson(balance.session).index >= 1);
-  const squats = new Sim('squats');
-  squats.frames(pose(), 25);
-  assert.equal(describeLesson(squats.session).index, 1);
-  for (let k = 0; k < 5; k++) { squats.frames(crouched(), 2); squats.t += 900; squats.frames(pose(), 2); }
-  assert.equal(squats.last.metrics.reps, 5);
-  assert.equal(describeLesson(squats.session).index, 2);
+  const leaning = up.map((p, i) => ([11, 12, 13, 14, 15, 16, 0].includes(i) ? { ...p, x: p.x + .12 } : p));
+  const before = balance.last.metrics.hold;
+  balance.frames(leaning, 12);
+  assert.equal(balance.last.metrics.hold, 0, 'a tilted torso pauses the hold');
+  assert.ok(before >= 1);
 });
 
 /* ───────────── phrases & cooldowns ───────────── */
 test('every skill has at least five phrases per tag and personality and templates resolve', () => {
   for (const skill of SKILL_LIST) {
-    for (const rule of skill.rules) {
-      const bank = skill.phrases[rule.tag];
-      assert.ok(bank, `${skill.id} lacks phrases for ${rule.tag}`);
-      for (const p of Object.keys(PERSONALITIES)) assert.ok(bank[p]?.length >= 5, `${skill.id}/${rule.tag}/${p}`);
+    const tags = new Set([...Object.keys(skill.phrases), ...Object.keys(skill.errors || {})]);
+    for (const tag of tags) {
+      const bank = skill.phrases[tag];
+      assert.ok(bank, `${skill.id} lacks phrases for ${tag}`);
+      for (const p of Object.keys(PERSONALITIES)) assert.ok(bank[p]?.length >= 5, `${skill.id}/${tag}/${p}`);
     }
-    for (const lesson of skill.lessons) for (const p of Object.keys(PERSONALITIES)) assert.ok(lesson.intro[p]);
+    assert.ok(skill.phrases[`${skill.id}-idle`] || Object.keys(skill.phrases).some(t => t.endsWith('-idle')), `${skill.id} has a nudge`);
+    for (const lesson of skill.lessons) for (const p of Object.keys(PERSONALITIES)) assert.ok(lesson.intro[p], `${skill.id}/${lesson.id}/${p}`);
   }
   for (const tag of Object.keys(COMMON_PHRASES)) for (const p of Object.keys(PERSONALITIES)) assert.ok(COMMON_PHRASES[tag][p].length >= 5);
   assert.equal(fillTemplate('Серия {streak}, касаний {touches}', { streak: 3, touches: 7 }), 'Серия 3, касаний 7');
@@ -296,23 +317,35 @@ test('personality changes the words but never the observation', () => {
   assert.notDeepEqual(strict.log.map(f => f.text), fun.log.map(f => f.text));
 });
 
-test('coaching tips respect the cooldown but loss of view interrupts immediately', () => {
-  const sim = new Sim(); sim.stance();
+test('a standing athlete gets one nudge after a long pause, not a stream of tips', () => {
+  const sim = new Sim('squats'); const aspect = 9 / 16; sim.aspect = aspect;
+  sim.frames(squatPose(0, { aspect }), 30);
   const start = sim.log.length;
-  sim.frames(pose(), 5);
-  assert.ok(sim.log.length - start <= 1);
-  const tilted = pose(); tilted[11].x = .8; tilted[12].x = .92; tilted[13].x = .85; tilted[14].x = .97; tilted[15].x = .9; tilted[16].x = .98;
-  sim.t += 4000; sim.frame(tilted);
-  assert.equal(sim.log.at(-1).tag, 'torso');
-  sim.frame(null);
-  assert.equal(sim.log.at(-1).tag, 'no-person');
+  sim.frames(squatPose(0, { aspect }), 120); // 12 s of standing still
+  assert.equal(sim.log.length - start, 0, 'no remarks while the athlete gets ready');
+  sim.frames(squatPose(0, { aspect }), 200); // 20 s more
+  assert.equal(sim.log.length - start, 1, 'one nudge');
+  assert.equal(sim.log.at(-1).tag, 'squats-idle');
 });
 
-test('main mistake is the most frequent corrective tag', () => {
+test('one high lift is not a remark; two of three are', () => {
+  const sim = new Sim(); sim.stance(); sim.lift(6);
+  sim.t += 9000; sim.lift(1, .25); sim.lift(1, .08);
+  assert.ok(!sim.tags().includes('lift-high'));
+  sim.lift(1, .25); sim.frames(pose(), 50);
+  assert.ok(sim.tags().includes('lift-high'), 'said once the previous remark has had its pause');
+});
+
+test('main mistake counts observed errors, not remarks', () => {
   const session = createSession();
-  session.tagCounts = { start: 9, 'lift-high': 4, torso: 2, 'ball-touch': 20 };
+  session.tagCounts = { 'lift-high': 1, torso: 9 };
+  session.errorCounts = { 'lift-high': 4, torso: 2 };
   assert.deepEqual(mainMistake(session), { tag: 'lift-high', count: 4 });
   assert.equal(mainMistake(createSession()), null);
+  const sim = new Sim(); sim.stance(); sim.lift(6); sim.t += 9000;
+  sim.lift(3, .25);
+  assert.ok(sim.session.errorCounts['lift-high'] >= 3, 'every high lift is counted even if the coach spoke once');
+  assert.ok((sim.session.tagCounts['lift-high'] || 0) <= 1);
 });
 
 test('session stepping is pure', () => {
@@ -338,4 +371,26 @@ test('far mode switches only after a sustained distance change, with hysteresis'
   const kept = farModeDecision({ far: true, frames: 5 }, 0.4, 'missing');
   assert.deepEqual(kept, { far: true, frames: 0 }, 'losing the person keeps the mode and resets the count');
   assert.deepEqual(farModeDecision({ far: false, frames: 3 }, NaN), { far: false, frames: 0 });
+});
+
+test('distance mode does not switch on during a deep squat', () => {
+  const aspect = 9 / 16;
+  let pose = createPoseState(); let far = { far: false, frames: 0 };
+  for (let k = 0; k < 6; k++) {
+    for (const p of [0, 0, .5, .9, 1, 1, 1, 1, 1, 1, 1, 1, .9, .5, 0, 0]) {
+      const o = observePose(squatPose(p, { aspect }), pose, k * 2000 + p, aspect, 'squats'); pose = o.state;
+      far = farModeDecision(far, o.obs.scale, o.obs.quality);
+    }
+  }
+  assert.equal(far.far, false, 'the hips going down are not the athlete walking away');
+});
+
+test('a skipped step is not reported as finished; the summary knows the current step (F01)', () => {
+  const sim = new Sim(); sim.stance(); sim.lift(6);
+  sim.session = skipLesson(sim.session);
+  const r = sim.frame(pose());
+  assert.deepEqual(r.metrics.completed, ['stance', 'lifts']);
+  assert.deepEqual(r.metrics.skipped, ['touch']);
+  assert.equal(r.metrics.lessonIndex, 3, 'the next step is «Серия из 3», not «Одно касание»');
+  assert.equal(r.metrics.lessonsDone, 2);
 });

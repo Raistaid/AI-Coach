@@ -95,7 +95,11 @@ test('metric phrases agree with the number', () => {
   assert.equal(metricPhrase(1, 'подъёмов стопы'), '1 подъём стопы');
   assert.equal(metricPhrase(11, 'повторов'), '11 повторов');
   assert.equal(metricPhrase(22, 'с баланса'), '22 секунды баланса');
-  assert.equal(metricPhrase(3, 'шагов'), '3 шагов', 'unknown labels are left as they are');
+  assert.equal(metricPhrase(3, 'шагов'), '3 шага', 'high knees count steps');
+  assert.equal(metricPhrase(21, 'отжиманий'), '21 отжимание');
+  assert.equal(metricPhrase(2, 'с планки'), '2 секунды планки');
+  assert.equal(metricPhrase(5, 'выпадов'), '5 выпадов');
+  assert.equal(metricPhrase(3, 'попыток'), '3 попыток', 'unknown labels are left as they are');
 });
 
 test('«давай потренируемся» is an invitation to train, not «не понял»', () => {

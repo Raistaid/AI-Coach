@@ -13,7 +13,7 @@ test('summary contains only numbers and labels, never frames or free text', () =
   const summary = buildSummary(snapshot);
   for (const value of Object.values(summary)) assert.ok(['number', 'string', 'boolean'].includes(typeof value));
   assert.equal(summary.lessonIndex, 4);
-  assert.equal(summary.mainMistake, 'стопа поднимается слишком высоко');
+  assert.equal(summary.mainMistake, 'стопа поднималась выше колена', 'the label comes from the skill catalog');
   assert.equal(buildSummary({}).skill, 'Чеканка мяча');
 });
 

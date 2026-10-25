@@ -44,7 +44,7 @@ export const COMMON_PHRASES = {
     ],
     fun: [
       'Где твои ноги? Отойди на шаг, чтобы я видел стопы!',
-      'Вижу только верх. Покажи колени и стопы, они главные в чеканке.',
+      'Вижу только верх. Покажи колени и стопы, без них не посчитаю.',
       'Ноги спрятались. Сделай шаг назад от телефона.',
       'Камере нужен вид на стопы. Чуть дальше, пожалуйста!',
       'Ещё шаг назад, и я увижу всю картину.',
@@ -57,28 +57,79 @@ export const COMMON_PHRASES = {
       'Когда стопы будут в кадре, продолжим.',
     ],
   },
-  'lesson-complete': {
+  'show-body': {
     strict: [
-      'Шаг «{lesson}» выполнен. Дальше: {next}.',
-      '«{lesson}» засчитан. Переходим: {next}.',
-      'Зачёт по шагу «{lesson}». Следующий: {next}.',
-      'Готово. Следующий шаг: {next}.',
-      '«{lesson}» закрыт. Теперь {next}.',
+      'Не вижу всё тело. Отойди дальше от телефона.',
+      'Руки или ноги вне кадра. Поправь камеру.',
+      'Нужно всё тело: от головы до стоп. Шаг назад.',
+      'Часть тела обрезана. Отодвинь телефон.',
+      'Встань так, чтобы кадр видел тебя целиком.',
     ],
     fun: [
-      'Есть! «{lesson}» в кармане. Дальше: {next}.',
-      'Красота, «{lesson}» выполнен. Идём дальше: {next}!',
-      'Так держать! Следующий шаг: {next}.',
-      'Шаг «{lesson}» закрыт, звезда. Теперь {next}.',
-      'Отлично получилось. Переходим к шагу: {next}.',
+      'Ты не помещаешься в кадр! Отойди чуть дальше.',
+      'Кадр обрезал половину чемпиона. Отодвинь телефон!',
+      'Покажись целиком, от макушки до пяток.',
+      'Шаг назад, и я увижу всю картину.',
+      'Камере нужен вид на всё тело. Чуть дальше, пожалуйста!',
     ],
     calm: [
-      'Шаг «{lesson}» выполнен. Следующий: {next}.',
-      'Хорошо. «{lesson}» получилось, переходим: {next}.',
-      'Этот шаг закрыт. Дальше спокойно: {next}.',
-      'Получилось. Следующий шаг: {next}.',
-      '«{lesson}» готов. Теперь {next}.',
+      'Мне нужно видеть всё тело. Отойди немного дальше от телефона.',
+      'Часть тела вне кадра. Поставь телефон дальше или ниже.',
+      'Проверь, что в кадре и голова, и стопы.',
+      'Когда будешь виден целиком, продолжим.',
+      'Отодвинь телефон, чтобы в кадр поместились руки и ноги.',
     ],
+  },
+  'turn-side': {
+    strict: [
+      'Повернись боком к камере. Так видно глубину.',
+      'Встань боком. Лицом я не вижу угол в коленях.',
+      'Боком к телефону. Тогда засчитаю.',
+      'Нужен профиль. Повернись на девяносто градусов.',
+      'Развернись боком и продолжай.',
+    ],
+    fun: [
+      'Покажи профиль! Боком я вижу всё до градуса.',
+      'Повернись боком, как на фото в паспорте, только веселее.',
+      'Боком к камере, и я стану точнее.',
+      'Развернись на четверть оборота, и поехали!',
+      'Профиль — твоя лучшая сторона для этого упражнения.',
+    ],
+    calm: [
+      'Для этого упражнения встань боком к камере: так видно углы в суставах.',
+      'Повернись боком к телефону, тогда я смогу считать правильно.',
+      'Профилем к камере тренер видит глубину движения.',
+      'Развернись боком и продолжай в своём темпе.',
+      'Поставь телефон сбоку от себя, так будет видно технику.',
+    ],
+  },
+  'turn-front': {
+    strict: [
+      'Повернись лицом к камере.',
+      'Встань лицом к телефону. Мне нужны обе руки и ноги.',
+      'Лицом к камере. Тогда засчитаю.',
+      'Развернись к телефону.',
+      'Нужно стоять лицом, а не боком.',
+    ],
+    fun: [
+      'Повернись ко мне лицом, я хочу видеть обе руки!',
+      'Лицом к камере, звезда!',
+      'Развернись к телефону, так я увижу всё.',
+      'Профиль красивый, но тут нужен анфас!',
+      'Лицом к камере, и поехали дальше.',
+    ],
+    calm: [
+      'Для этого упражнения встань лицом к камере.',
+      'Повернись к телефону лицом, чтобы я видел обе стороны тела.',
+      'Лицом к камере будет видно и руки, и ноги.',
+      'Развернись к телефону и продолжай.',
+      'Встань прямо перед камерой.',
+    ],
+  },
+  'lesson-done': {
+    strict: ['Шаг засчитан.', 'Готово.', 'Зачёт.', 'Есть.', 'Выполнено.'],
+    fun: ['Есть! Шаг в кармане.', 'Красота, шаг закрыт!', 'Отлично получилось!', 'Ура, следующий уровень!', 'Так держать!'],
+    calm: ['Шаг выполнен.', 'Хорошо, получилось.', 'Этот шаг закрыт.', 'Отлично.', 'Готово, молодец.'],
   },
   'course-complete': {
     strict: [
@@ -117,4 +168,68 @@ export function pickPhrase(bank, personality, previousIndex = -1, seed = 0) {
 
 export function fillTemplate(text, vars = {}) {
   return String(text).replace(/\{(\w+)\}/g, (match, key) => (vars[key] === undefined || vars[key] === null ? match : String(vars[key])));
+}
+
+/* ───────────── Catalog structure and lesson builders ───────────── */
+
+export const CATEGORIES = [
+  { id: 'football', name: 'Футбол', note: 'Мяч, баланс и координация' },
+  { id: 'strength', name: 'Сила', note: 'Ноги, руки и корпус' },
+  { id: 'cardio', name: 'Кардио', note: 'Ритм и выносливость' },
+];
+
+/** First step of most skills: stand in the start position and hold still. It also calibrates the coach. */
+export function stanceLesson({ id = 'stance', title = 'Исходное положение', short = 'Стойка', seconds = 2, goal, intro }) {
+  return {
+    id, title, short, target: seconds, unit: 'с', goal, intro,
+    update({ motion, now }, memo = {}) {
+      if (!motion?.ready) return { progress: 0, memo: { since: null } };
+      const since = memo.since ?? now;
+      return { progress: Math.min(seconds, (now - since) / 1000), memo: { since } };
+    },
+  };
+}
+
+/** Repetitions counted since the step began; `clean` counts only repetitions without remarks. */
+export function repLesson({ id, title, short, target, goal, intro, clean = false }) {
+  return {
+    id, title, short, target, unit: '', goal, intro, clean,
+    update({ motion }, memo = { count: 0 }) {
+      const event = motion?.event;
+      const count = (memo.count || 0) + (event?.type === 'rep' && (!clean || event.clean) ? 1 : 0);
+      return { progress: count, memo: { count } };
+    },
+  };
+}
+
+/** The longest continuous hold reached during this step. */
+export function holdLesson({ id, title, short, seconds, goal, intro }) {
+  return {
+    id, title, short, target: seconds, unit: 'с', goal, intro,
+    update({ motion }, memo = { best: 0 }) {
+      const current = motion?.hold?.active ? motion.hold.seconds : 0;
+      const best = Math.max(memo.best || 0, current);
+      return { progress: Math.min(seconds, best), memo: { best } };
+    },
+  };
+}
+
+/** Praise only on round numbers: the first repetition, then every fifth or tenth. */
+export const REP_MARKS = [1, 5, 10, 15, 20, 30, 40, 50, 75, 100];
+export const HOLD_MARKS = [5, 10, 15, 20, 30, 45, 60, 90, 120];
+/** The hold mark crossed between two readings, or null. */
+export function crossedMark(before, after, marks = HOLD_MARKS) {
+  return marks.find(mark => before < mark && after >= mark) ?? null;
+}
+
+/** The athlete left the frame: a movement in progress is dropped, totals are kept. */
+export function pauseMemo(memo) {
+  if (!memo || typeof memo !== 'object') return memo;
+  const next = { ...memo, cur: null };
+  if (memo.reps) next.reps = { ...memo.reps, phase: 'idle', frames: 0, peak: 0, excursion: 0 };
+  if (memo.hold) next.hold = { ...memo.hold, since: null, seconds: 0 };
+  if (Array.isArray(memo.legs)) next.legs = memo.legs.map(leg => ({ ...leg, phase: 'down', frames: 0, peak: 0 }));
+  if (memo.jack) next.jack = { ...memo.jack, phase: 'idle', frames: 0, arms: false, legs: false, maxSpread: 0, overHead: false };
+  if ('lift' in memo) next.lift = null;
+  return next;
 }

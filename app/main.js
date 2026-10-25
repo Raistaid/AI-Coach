@@ -1,6 +1,6 @@
 // Bootstrap: local profile gate, screens and tabs, chat drawer with swipe,
 // skill sheet, progress and profile screens. Wires chat.js and live.js together.
-import { SKILL_LIST, getSkill, PERSONALITIES } from '../skills/index.js';
+import { SKILL_LIST, getSkill, PERSONALITIES, CATEGORIES } from '../skills/index.js';
 import { createLocalCoach, hasCachedModel, supportsWebGPU, LLM_MODELS } from '../coach-llm.js';
 import { pluralize } from '../coach-planner.js';
 import { compareProgress } from '../coach-progress.js';
@@ -152,18 +152,27 @@ document.addEventListener('touchcancel', endDrag, { passive: true });
 document.addEventListener('keydown', (event) => { if (event.key === '[' && profile && !live.isActive() && (event.metaKey || event.ctrlKey)) { event.preventDefault(); setDrawer(!drawerOpen); } });
 
 /* ───────────── Catalog & skill sheet ───────────── */
+// Catalog: one section per category, a plain tile per skill (emoji, name, length).
 function renderCatalog() {
-  const grid = $('catalogGrid'); grid.replaceChildren();
+  const root = $('catalogGrid'); root.replaceChildren();
   const done = new Set(history.map(s => s.skill));
-  for (const skill of SKILL_LIST) {
-    const card = el('button', 'skill-tile'); card.type = 'button';
-    const top = el('div', 'tile-top'); top.append(el('span', 'skill-emoji', skill.emoji));
-    const planIndex = prefs.plan.indexOf(skill.id);
-    if (planIndex !== -1) top.append(el('span', 'tile-badge', `маршрут ${planIndex + 1}`));
-    else if (done.has(skill.id)) { const badge = el('span', 'tile-badge seen'); badge.append(icon('i-check'), document.createTextNode(' было')); top.append(badge); }
-    card.append(top, el('b', null, skill.name), el('small', null, `${skill.level} · ${steps(skill.lessons.length)} · ${skill.minutes} мин`), el('p', null, skill.tagline));
-    card.addEventListener('click', () => openSkillSheet(skill.id));
-    grid.append(card);
+  for (const category of CATEGORIES) {
+    const skills = SKILL_LIST.filter(skill => skill.category === category.id);
+    if (!skills.length) continue;
+    const section = el('section', 'catalog-section');
+    const head = el('div', 'catalog-head'); head.append(el('h3', null, category.name), el('small', null, category.note));
+    const grid = el('div', 'catalog-grid');
+    for (const skill of skills) {
+      const card = el('button', 'skill-tile'); card.type = 'button';
+      const top = el('div', 'tile-top'); top.append(el('span', 'skill-emoji', skill.emoji));
+      const planIndex = prefs.plan.indexOf(skill.id);
+      if (planIndex !== -1) top.append(el('span', 'tile-badge', `маршрут ${planIndex + 1}`));
+      else if (done.has(skill.id)) { const badge = el('span', 'tile-badge seen'); badge.setAttribute('aria-label', 'уже тренировался'); badge.append(icon('i-check')); top.append(badge); }
+      card.append(top, el('b', null, skill.name), el('small', null, `${steps(skill.lessons.length)} · ${skill.minutes} мин${skill.needsBall ? ' · мяч' : ''}`));
+      card.addEventListener('click', () => openSkillSheet(skill.id));
+      grid.append(card);
+    }
+    section.append(head, grid); root.append(section);
   }
 }
 function openSkillSheet(skillId) {
@@ -185,7 +194,10 @@ document.querySelector('[data-sheet-backdrop]').addEventListener('click', closeS
 /* ───────────── Progress ───────────── */
 function renderProgress() {
   const stats = store.historyStats(history);
-  text('statTrainings', stats.trainings); text('statMinutes', stats.minutes); text('statStreak', stats.bestStreak); text('statDays', stats.days);
+  const tail = (n, forms) => pluralize(n, forms).split(' ').slice(1).join(' ');
+  text('statTrainings', stats.trainings); text('statTrainingsLabel', tail(stats.trainings, ['тренировка', 'тренировки', 'тренировок']));
+  text('statMinutes', stats.minutes); text('statMinutesLabel', tail(stats.minutes, ['минута', 'минуты', 'минут']));
+  text('statDays', stats.days); text('statDaysLabel', `${tail(stats.days, ['день', 'дня', 'дней'])} подряд`);
   const list = $('historyList'); list.replaceChildren(); $('clearHistory').disabled = history.length === 0;
   if (!history.length) { list.append(el('p', 'empty', 'Здесь появятся итоги эфиров. Демо в историю не записывается, видео не хранится.')); return; }
   for (const [index, session] of history.entries()) {
@@ -198,7 +210,7 @@ function renderProgress() {
     copy.append(el('p', `history-progress${progress?.isNewBest ? ' is-best' : ''}`, progress ? progress.text : 'Для этой записи сравнение недоступно.'));
     row.append(copy); list.append(row);
   }
-  list.append(el('p', 'history-note', 'Сравнение по последним 50 сохранённым тренировкам: отдельно для каждого навыка, показателя и источника. Количество движений не оценивает качество техники.'));
+  list.append(el('p', 'history-note', 'Сравниваются тренировки одного навыка и источника, до 50 последних.'));
 }
 $('clearHistory').addEventListener('click', () => { history = []; store.saveHistory(history); renderProgress(); chat.setHistory(history); toast('История очищена'); });
 
@@ -217,11 +229,11 @@ $('profileNameInput').addEventListener('change', () => {
 function renderPersonalities() {
   const row = $('personalityRow'); row.replaceChildren();
   for (const p of Object.values(PERSONALITIES)) {
-    const chip = el('button', 'persona'); chip.type = 'button'; chip.setAttribute('role', 'radio'); chip.setAttribute('aria-checked', String(p.id === prefs.personality));
-    chip.append(el('b', null, p.name), el('small', null, p.description));
-    chip.addEventListener('click', () => { prefs.personality = p.id; store.savePrefs(prefs); renderPersonalities(); bus.emit('prefs-changed'); toast(`${p.name} тренер`); });
+    const chip = el('button', 'segment', p.name); chip.type = 'button'; chip.setAttribute('role', 'radio'); chip.setAttribute('aria-checked', String(p.id === prefs.personality));
+    chip.addEventListener('click', () => { prefs.personality = p.id; store.savePrefs(prefs); renderPersonalities(); bus.emit('prefs-changed'); });
     row.append(chip);
   }
+  text('personalityNote', PERSONALITIES[prefs.personality].description);
 }
 function applyPreferences() {
   for (const key of ['voice', 'skeleton', 'mirror', 'objects', 'sound', 'autoFar']) if ($(key + 'Input')) $(key + 'Input').checked = prefs[key];
@@ -239,7 +251,7 @@ document.querySelectorAll('input[name=llmModel]').forEach(radio => radio.addEven
   prefs.llmModel = radio.value; store.savePrefs(prefs);
   await unloadLiveCoach(); if (prefs.liveCoach) ensureLiveCoach().catch(() => {});
 }));
-bus.on('prefs-changed', () => { applyPreferences(); if (app.dataset.screen === 'profile') renderPersonalities(); chat.renderStories(); });
+bus.on('prefs-changed', () => { applyPreferences(); if (app.dataset.screen === 'profile') renderPersonalities(); chat.renderHeader(); });
 
 /* ───────────── Local LLM ───────────── */
 function renderModels() {
@@ -297,7 +309,7 @@ function renderVoiceOptions() {
   for (const voice of voices) { const option = el('option', null, `${voice.name}${voice.localService ? '' : ' · онлайн'}`); option.value = voiceKey(voice); system.append(option); }
   if (voices.length) select.append(system);
   select.value = localVoice(prefs.voiceId) || voices.some(v => voiceKey(v) === prefs.voiceId) ? prefs.voiceId : '';
-  text('voiceHint', 'Денис и Дмитрий озвучивают текст на устройстве после скачивания. Можно также выбрать русский голос системы.');
+  text('voiceHint', 'Денис и Дмитрий звучат на устройстве после скачивания');
   renderLocalVoiceControls();
 }
 function renderLocalVoiceControls() {
@@ -342,7 +354,6 @@ bus.on('gesture', () => { live.unlockSpeech(); live.ensureAudio(); });
 bus.on('live-final-text', data => chat.attachLiveText(data.live));
 bus.on('live-failed', () => chat.postSystem('Эфир не запустился'));
 bus.on('live-cancelled', () => chat.postSystem('Эфир отменён'));
-bus.on('live-started', ({ skillId, mode }) => chat.postSystem(`${mode === 'demo' ? 'Демо начато' : mode === 'file' ? 'Разбор видео начат' : 'Эфир начат'} · ${getSkill(skillId).name}`));
 bus.on('live-finished', (data) => { chat.postSummary(data); if (app.dataset.screen === 'progress') renderProgress(); chat.setHistory(history); renderModels(); });
 live.initLive({
   prefs, profile, ensureLiveCoach, getLiveCoach: () => modelManager.loaded,

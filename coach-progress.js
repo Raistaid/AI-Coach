@@ -1,11 +1,15 @@
 // Compare measured results only within one skill, metric and media source.
 // Legacy records stay in the UI but cannot supply an unknown provenance here.
 
-const METRICS = {
-  football: { touches: 'Лучшая серия', lifts: 'Подъёмы стопы' },
-  squats: { reps: 'Повторы' },
-  balance: { balanceSeconds: 'Лучшее удержание, с' },
-};
+import { SKILL_LIST } from './skills/index.js';
+
+// One comparable metric per skill (keepie-uppie also has its no-ball fallback), named by the catalog.
+const METRICS = Object.fromEntries(SKILL_LIST.map(skill => {
+  const metric = skill.metric;
+  const entries = { [metric.key]: metric.progress || metric.label };
+  if (metric.fallbackKey) entries[metric.fallbackKey] = metric.fallbackProgress || metric.fallbackLabel;
+  return [skill.id, entries];
+}));
 
 const count = value => Number.isSafeInteger(value) && value >= 0;
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;

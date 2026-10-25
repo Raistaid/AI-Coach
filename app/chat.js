@@ -42,19 +42,19 @@ function setJump(visible, fresh = false) {
 }
 
 export function setProfile(profile) { ctx.profile = profile; }
-export function setHistory(history) { ctx.history = history; renderStories(); }
+export function setHistory(history) { ctx.history = history; }
 export function currentThread() { return ctx.thread; }
 
 function greetingText() {
   const name = ctx.profile?.name || 'друг';
-  return `${store.greeting(name)} Я твой тренер. Напиши, чему хочешь научиться, или выбери навык в кружках сверху.`;
+  return `${store.greeting(name)} Я твой тренер. Напиши, чему хочешь научиться, или открой вкладку «Навыки».`;
 }
 
 /** App start: reuse an untouched chat, otherwise open a new one. */
 export function openFresh() {
   const { chats, thread } = store.freshThread(ctx.chats, greetingText());
   ctx.chats = chats; ctx.thread = thread; ctx.llmHistory = [];
-  store.saveChats(chats); renderThread(); renderDrawer(); renderStories();
+  store.saveChats(chats); renderThread(); renderDrawer();
 }
 export function newThread() {
   const thread = store.createThread(greetingText());
@@ -88,7 +88,7 @@ function renderThread() {
     if (day !== lastDay) { list.append(el('div', 'day-sep', day)); lastDay = day; }
     list.append(messageNode(message));
   }
-  text('chatSub', `${PERSONALITIES[ctx.prefs.personality].name} тренер · ИИ на устройстве`);
+  renderHeader();
   stick = true; setJump(false); renderChips(); scrollBottom();
 }
 function appendNode(message) {
@@ -160,9 +160,9 @@ function skillCard(data) {
 }
 function summaryCard(data) {
   const card = el('div', 'card summary');
-  card.append(el('b', 'card-title', `${data.demo ? 'Демо' : data.source === 'file' ? 'Видео' : 'Эфир'} · ${data.skillName || ''}`));
+  card.append(el('b', 'card-title', `${data.skillName || ''} · ${formatTime(data.seconds || 0)}`), el('small', 'card-goal', data.demo ? 'Демо: симуляция, в историю не записана' : data.source === 'file' ? 'Разбор видео' : 'Эфир с камеры'));
   const stats = el('div', 'card-stats');
-  for (const [value, label] of [[formatTime(data.seconds || 0), 'в движении'], [String(data.metricValue ?? 0), data.metricLabel || ''], [`${data.lessonsDone ?? 0}/${data.lessonsTotal ?? 0}`, 'шагов']]) {
+  for (const [value, label] of [[String(data.metricValue ?? 0), data.metricLabel || ''], [`${data.lessonsDone ?? 0}/${data.lessonsTotal ?? 0}`, 'шагов урока']]) {
     const cell = el('div'); cell.append(el('b', null, value), el('span', null, label)); stats.append(cell);
   }
   card.append(stats);
@@ -172,7 +172,6 @@ function summaryCard(data) {
   }
   if (data.rhythm?.times?.length) card.append(rhythmNode(data.rhythm));
   if (data.live) { const live = el('p', 'card-line llm'); live.append(el('span', 'badge-llm', 'живой тренер'), document.createTextNode(` ${data.live}`)); card.append(live); }
-  if (data.demo) card.append(el('small', 'card-note', 'Симуляция на нарисованном спортсмене. В историю не записана.'));
   const again = el('button', 'btn-ghost small', data.demo ? 'Запустить эфир с камерой' : 'Повторить'); again.type = 'button';
   again.addEventListener('click', () => bus.emit('start-live', { skillId: data.skillId || ctx.prefs.skill, mode: 'camera' }));
   card.append(again);
@@ -183,10 +182,10 @@ function renderChips() {
   const chips = $('chatChips'); chips.replaceChildren();
   const last = [...ctx.thread.messages].reverse().find(m => m.role !== 'system');
   // Quick replies follow the conversation: after a session they are about that session.
-  const items = store.isFresh(ctx.thread) ? ['Хочу научиться чеканить, но мяч падает', 'Хочу укрепить ноги', 'Не знаю, с чего начать', 'Покажи демо']
-    : last?.type === 'summary' ? ['Как у меня получилось?', 'Повторить эфир', 'Другой навык', 'Как дела?']
+  const items = store.isFresh(ctx.thread) ? ['Хочу чеканить мяч', 'Хочу укрепить ноги', 'Не знаю, с чего начать']
+    : last?.type === 'summary' ? ['Как у меня получилось?', 'Повторить эфир', 'Другой навык']
     : last?.role === 'coach' && last.offer ? ['Давай', 'Не сейчас', 'Покажи демо']
-    : ['Начать эфир', 'Как дела?', 'Покажи демо', 'Другая цель'];
+    : ['Начать эфир', 'Покажи демо', 'Другая цель'];
   for (const label of items) {
     const chip = el('button', 'chip', label); chip.type = 'button';
     chip.addEventListener('click', () => send(label));
@@ -194,16 +193,9 @@ function renderChips() {
   }
 }
 
-export function renderStories() {
-  const row = $('storiesRow'); row.replaceChildren();
-  const seen = new Set(ctx.history.map(s => s.skill));
-  for (const skill of SKILL_LIST) {
-    const story = el('button', `story${seen.has(skill.id) ? ' seen' : ''}${ctx.prefs.plan.includes(skill.id) ? ' planned' : ''}`); story.type = 'button';
-    story.setAttribute('aria-label', skill.name);
-    const ring = el('span', 'story-ring'); ring.append(el('span', 'story-emoji', skill.emoji)); story.append(ring, el('span', 'story-name', skill.short || skill.name.split(' ')[0]));
-    story.addEventListener('click', () => bus.emit('open-skill', skill.id));
-    row.append(story);
-  }
+/** The header names the coach's character; it follows the profile setting. */
+export function renderHeader() {
+  text('chatSub', `${PERSONALITIES[ctx.prefs.personality].name} тренер · ИИ на устройстве`);
 }
 
 export function renderDrawer() {
@@ -254,7 +246,7 @@ export async function send(raw, { fromInput = false } = {}) {
       await coachSays(`Открываю эфир: ${skill.name}. ${skill.camera}`);
       bus.emit('start-live', { skillId: skill.id, mode: 'camera' });
     } else if (/не знаю|с чего начать|помоги выбрать/.test(q)) {
-      await coachSays('Давай так: что ближе одним словом, мяч, ноги или равновесие? Или нажми на навык в кружках сверху, расскажу о нём.');
+      await coachSays('Давай так: что ближе одним словом — мяч, ноги, руки, пресс или выносливость? Или открой вкладку «Навыки».');
     } else if (/^(другая цель|другой навык)/.test(q)) {
       await coachSays('Напиши новую цель своими словами, соберу маршрут заново.');
     } else {
@@ -322,7 +314,7 @@ async function plan(query) {
   if (result.plan.length) {
     ctx.prefs.plan = result.plan; ctx.prefs.planGoal = query; ctx.prefs.skill = result.plan[0]; store.savePrefs(ctx.prefs);
     push({ role: 'coach', type: 'route', data: { plan: result.plan, goal: query }, skill: result.plan[0] });
-    bus.emit('prefs-changed'); renderStories();
+    bus.emit('prefs-changed');
   }
 }
 
@@ -330,12 +322,10 @@ async function plan(query) {
 export async function introduceSkill(skillId) {
   const skill = getSkill(skillId);
   ctx.prefs.skill = skill.id; store.savePrefs(ctx.prefs); bus.emit('prefs-changed');
-  push({ role: 'coach', type: 'skill', data: { skillId: skill.id }, skill: skill.id });
 }
 
 /** Called when a live session ends. */
 export function postSummary(data) {
-  push({ role: 'system', type: 'text', text: `${data.demo ? 'Демо завершено' : 'Эфир завершён'} · ${formatTime(data.seconds || 0)}` });
   const message = push({ role: 'coach', type: 'summary', data, skill: data.skillId });
   stick = true; scrollBottom();
   lastSummary = { threadId: ctx.thread.id, messageId: message.id };

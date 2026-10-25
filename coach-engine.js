@@ -1,10 +1,15 @@
 // Vision + coaching engine. MediaPipe inference runs on this device; no video
 // frames leave the browser. Everything below `createCoachEngine` is pure and
-// unit-tested: pose observations, ball tracking, lesson progression, phrases.
+// unit-tested: body features and the skill's own movement checks
+// (coach-motion.js and skills/*), ball tracking, lesson progression and the
+// message budget (coach-policy.js) that decides what the coach says and when.
 import { getSkill, personalityId } from './skills/index.js';
-import { COMMON_PHRASES, pickPhrase, fillTemplate } from './skills/common.js';
+import { COMMON_PHRASES, pickPhrase, fillTemplate, pauseMemo } from './skills/common.js';
 import { normalizeObjects, ballDetections } from './coach-objects.js';
+import { jointAngle, bodyFeatures, calibrate, createCalibration, confirmByReps, stepLiveErrors, VIS } from './coach-motion.js';
+import { createPolicy, noteView, noteActivity, choose } from './coach-policy.js';
 
+export { jointAngle };
 export const MODEL_VERSION = '0.10.21';
 export const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
 export const OBJECT_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite';
@@ -18,129 +23,57 @@ export const POSE_CONNECTIONS = [
   [28, 30], [30, 32], [28, 32],
 ];
 
-const CONFIDENCE = 0.55;
-const COOLDOWN = { tip: 4000, success: 1500, warning: 2000, lesson: 0 };
-const SAME_TAG_COOLDOWN = 12000;
 const BALL_LOST_MS = 1500;
 const BALL_SPEED = 0.18; // normalized image units per second
 const distance = (a, b, aspect = 1) => Math.hypot((a.x - b.x) * aspect, a.y - b.y);
-
-export function jointAngle(a, b, c, aspectRatio = 1) {
-  if (![a, b, c].every(p => p && Number.isFinite(p.x) && Number.isFinite(p.y))) return null;
-  const aspect = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1;
-  const ab = { x: (a.x - b.x) * aspect, y: a.y - b.y };
-  const cb = { x: (c.x - b.x) * aspect, y: c.y - b.y };
-  const denominator = Math.hypot(ab.x, ab.y) * Math.hypot(cb.x, cb.y);
-  if (denominator < 1e-8) return null;
-  return Math.acos(Math.max(-1, Math.min(1, (ab.x * cb.x + ab.y * cb.y) / denominator))) * 180 / Math.PI;
-}
-
-function visible(p) {
-  return Boolean(p && Number.isFinite(p.x) && Number.isFinite(p.y)
-    && (p.visibility ?? 1) >= CONFIDENCE && (p.presence ?? 1) >= CONFIDENCE
-    && p.x > 0.015 && p.x < 0.985 && p.y > 0.015 && p.y < 0.985);
-}
+const visibleRaw = (p) => Boolean(p && Number.isFinite(p.x) && Number.isFinite(p.y)
+  && (p.visibility ?? 1) >= VIS && (p.presence ?? 1) >= VIS && p.x > 0.015 && p.x < 0.985 && p.y > 0.015 && p.y < 0.985);
 
 /* ───────────────────────── Pose observations ───────────────────────── */
 
 export function createPoseState() {
   return {
-    samples: 0, lifts: 0, reps: 0,
-    ground: [null, null],
-    feet: [{ phase: 'down', frames: 0 }, { phase: 'down', frames: 0 }],
-    lastLiftAt: -Infinity, lastRepAt: -Infinity,
-    squatPhase: 'unready', squatFrames: 0,
-    balanceSince: null, balanceSeconds: 0,
-    hipTrail: [], quality: 'missing',
+    samples: 0, quality: 'missing', framing: 'no-person', lifts: 0,
+    ground: [null, null], feet: [{ phase: 'down', frames: 0 }, { phase: 'down', frames: 0 }], lastLiftAt: -Infinity,
+    hipTrail: [], calib: createCalibration(), motion: undefined, repHistory: [], liveErrors: {},
   };
 }
 
-function emptyObservation(quality, points, state) {
-  return {
-    quality, points, visible: false,
-    kneeAngle: { left: null, right: null, mean: null }, softKnee: false, supportKnee: null,
-    torsoTilt: 0, shoulderSlope: 0, torsoLean: false, armsSpread: true,
-    lift: [0, 0], raised: false, raisedSide: -1, liftCompleted: false, liftHigh: false,
-    standingStill: false, squat: { phase: state.squatPhase, repCompleted: false },
-    balanceSeconds: state.balanceSeconds, lifts: state.lifts, reps: state.reps,
-    hips: null, kneeY: null, feet: [], legScale: 0.2,
-  };
-}
+const NO_FEET = { lift: [0, 0], raised: false, raisedSide: -1, liftCompleted: false, liftHigh: false, completedPeak: 0, supportKnee: null, armsSpread: true };
 
 function resetMotion(state) {
   state.samples = 0;
   state.ground = [null, null];
   state.feet = state.feet.map(() => ({ phase: 'down', frames: 0 }));
-  state.squatPhase = 'unready';
-  state.squatFrames = 0;
-  state.balanceSince = null;
   state.hipTrail = [];
+  state.liveErrors = {};
+  state.motion = pauseMemo(state.motion); // totals stay, a movement in progress is dropped
 }
 
-/** Pure, deterministic analysis of one landmark frame. Returns { state, obs }. */
-export function observePose(landmarks, previous, timestamp = 0, aspectRatio = 1, skillId = 'football') {
-  const aspect = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1;
-  const old = previous || createPoseState();
-  const state = { ...old, ground: [...old.ground], feet: old.feet.map(f => ({ ...f })), hipTrail: [...old.hipTrail] };
-  const now = Number.isFinite(timestamp) ? timestamp : 0;
-  const points = Array.isArray(landmarks) && landmarks.length >= 33 ? landmarks : null;
-  const torso = points && [11, 12, 23, 24].filter(i => visible(points[i])).length === 4;
-  if (!torso) {
-    resetMotion(state); state.quality = 'missing';
-    return { state, obs: emptyObservation('missing', points, state) };
-  }
-  const legs = [[23, 25, 27], [24, 26, 28]].map(indices => indices.every(i => visible(points[i])));
-  const enoughLegs = skillId === 'squats' ? legs.some(Boolean) : legs.every(Boolean);
-  if (!enoughLegs) {
-    resetMotion(state); state.quality = 'partial';
-    return { state, obs: emptyObservation('partial', points, state) };
-  }
+function emptyObservation(quality, framing, points, state, f) {
+  return {
+    quality, framing, points, visible: false, still: false, standingStill: false,
+    ...NO_FEET, lifts: state.lifts, tilt: f?.tilt ?? 0, motion: null,
+    hips: null, kneeY: null, legScale: f?.legScale ?? 0.2, feet: [],
+  };
+}
 
-  state.samples += 1;
-  state.quality = 'good';
-  const leftAngle = legs[0] ? jointAngle(points[23], points[25], points[27], aspect) : null;
-  const rightAngle = legs[1] ? jointAngle(points[24], points[26], points[28], aspect) : null;
-  const angles = [leftAngle, rightAngle].filter(v => Number.isFinite(v));
-  const kneeMean = angles.reduce((sum, v) => sum + v, 0) / angles.length;
-  const shoulders = { x: (points[11].x + points[12].x) / 2, y: (points[11].y + points[12].y) / 2 };
-  const hips = { x: (points[23].x + points[24].x) / 2, y: (points[23].y + points[24].y) / 2 };
+/**
+ * Foot lifts from ankle heights, calibrated per side: a foot already held up
+ * when entering the frame does not count, a single jittery frame does not count.
+ * Used by keepie-uppie (lifts) and balance (a raised foot).
+ */
+function stepFeet(state, points, f, now, aspect) {
+  if (!f.legVisible[0] || !f.legVisible[1]) {
+    state.ground = [null, null]; state.feet = state.feet.map(() => ({ phase: 'down', frames: 0 }));
+    return { ...NO_FEET };
+  }
   const ankles = [points[27], points[28]];
-  const legScale = Math.max(0.16, Math.max(...ankles.filter(visible).map(p => p.y)) - hips.y);
-  const kneeY = [points[25], points[26]].filter(visible).reduce((sum, p, _, arr) => sum + p.y / arr.length, 0) || null;
-
-  // Stillness: hips barely move over the last ~600 ms.
-  state.hipTrail.push({ t: now, x: hips.x, y: hips.y });
-  state.hipTrail = state.hipTrail.filter(h => now - h.t <= 600);
-  const drift = Math.max(...state.hipTrail.map(h => distance(h, hips, aspect)));
-  const standingStill = state.hipTrail.length >= 3 && drift < legScale * 0.08;
-
-  // Squat cycle: stand -> bent -> stand with two-frame hysteresis.
-  const squat = { phase: state.squatPhase, repCompleted: false };
-  if (skillId === 'squats') {
-    const standing = kneeMean > 160;
-    const lowered = kneeMean < 110;
-    if (state.squatPhase === 'unready') {
-      state.squatFrames = standing ? state.squatFrames + 1 : 0;
-      if (state.squatFrames >= 2) { state.squatPhase = 'standing'; state.squatFrames = 0; }
-    } else if (state.squatPhase === 'standing') {
-      state.squatFrames = lowered ? state.squatFrames + 1 : 0;
-      if (state.squatFrames >= 2) { state.squatPhase = 'lowered'; state.squatFrames = 0; }
-    } else {
-      state.squatFrames = standing ? state.squatFrames + 1 : 0;
-      if (state.squatFrames >= 2) {
-        if (now - state.lastRepAt >= 1000) { state.reps += 1; state.lastRepAt = now; squat.repCompleted = true; }
-        state.squatPhase = 'standing'; state.squatFrames = 0;
-      }
-    }
-    squat.phase = state.squatPhase;
-  }
-
-  // Ankle calibration per side: a foot already held up when entering the frame
-  // must not count as a completed lift.
   ankles.forEach((ankle, side) => {
     if (state.ground[side] === null) state.ground[side] = ankle.y;
     if (state.feet[side].phase === 'down') state.ground[side] = Math.max(state.ground[side], ankle.y);
   });
+  const legScale = f.legScale;
   const raiseThreshold = Math.max(0.035, legScale * 0.14);
   const lowerThreshold = Math.max(0.018, legScale * 0.06);
   const lift = ankles.map((ankle, side) => state.ground[side] - ankle.y);
@@ -162,36 +95,74 @@ export function observePose(landmarks, previous, timestamp = 0, aspectRatio = 1,
       }
     });
   }
-  const raisedSide = state.feet.findIndex(f => f.phase === 'up');
+  const raisedSide = state.feet.findIndex(foot => foot.phase === 'up');
   const raised = raisedSide !== -1;
   // Height is judged at the peak of the movement, so a completed lift carries its own verdict.
   const highThreshold = legScale * 0.5;
   const liftHigh = raised ? lift[raisedSide] > highThreshold : liftCompleted && completedPeak > highThreshold;
-  const supportKnee = raised ? (raisedSide === 0 ? rightAngle : leftAngle) : null;
-
-  const torsoTilt = Math.abs(shoulders.x - hips.x) * aspect / Math.max(0.12, distance(shoulders, hips, aspect));
-  const shoulderSlope = Math.abs(points[11].y - points[12].y);
-  const torsoLean = Math.abs(shoulders.x - hips.x) * aspect > legScale * 0.5;
-  const wrists = [[15, 11], [16, 12]].filter(([w]) => visible(points[w]));
+  const supportKnee = raised ? f.knee[1 - raisedSide] : null;
+  const wrists = [[15, 11], [16, 12]].filter(([w]) => visibleRaw(points[w]));
   const armsSpread = wrists.length === 0 || wrists.some(([w, s]) => Math.abs(points[w].x - points[s].x) * aspect > legScale * 0.35);
+  return { lift, raised, raisedSide, liftCompleted, liftHigh, completedPeak, supportKnee, armsSpread };
+}
 
-  if (skillId === 'balance') {
-    if (raised && torsoTilt < 0.4 && shoulderSlope < 0.08) {
-      if (state.balanceSince === null) state.balanceSince = now;
-      state.balanceSeconds = Math.max(state.balanceSeconds, Math.floor((now - state.balanceSince) / 1000));
-    } else state.balanceSince = null;
+/**
+ * Pure analysis of one landmark frame for a skill. Returns { state, obs }.
+ * `obs.motion` carries the skill's verdict: a counted repetition or an attempt
+ * (with its errors), a hold, milestones, and errors confirmed over several
+ * repetitions or a sustained moment.
+ */
+export function observePose(landmarks, previous, timestamp = 0, aspectRatio = 1, skillId = 'football') {
+  const skill = getSkill(skillId);
+  const aspect = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1;
+  const old = previous || createPoseState();
+  const state = { ...old, ground: [...old.ground], feet: old.feet.map(foot => ({ ...foot })), hipTrail: [...old.hipTrail] };
+  const now = Number.isFinite(timestamp) ? timestamp : 0;
+  const points = Array.isArray(landmarks) && landmarks.length >= 33 ? landmarks : null;
+  const f = points ? bodyFeatures(points, aspect) : null;
+  const framing = f ? skill.view(f) : 'no-person';
+  if (framing) {
+    const quality = f ? 'partial' : 'missing';
+    resetMotion(state); state.quality = quality; state.framing = framing;
+    return { state, obs: emptyObservation(quality, framing, points, state, f) };
   }
+  state.samples += 1; state.quality = 'good'; state.framing = null;
 
+  // Stillness: the hips barely move over the last ~600 ms.
+  state.hipTrail.push({ t: now, x: f.hipMid.x, y: f.hipMid.y });
+  state.hipTrail = state.hipTrail.filter(h => now - h.t <= 600);
+  const drift = Math.max(...state.hipTrail.map(h => Math.hypot(h.x - f.hipMid.x, h.y - f.hipMid.y)));
+  const still = state.hipTrail.length >= 3 && drift < f.legScale * 0.08;
+  state.calib = calibrate(state.calib, f, still);
+  const feet = stepFeet(state, points, f, now, aspect);
+
+  const m = skill.measure({ f, calib: state.calib, still, feet, now }, state.motion);
+  state.motion = m.memo;
+  let confirmed = []; let observed = [];
+  if (m.event?.type === 'rep') {
+    const check = confirmByReps(state.repHistory, m.event.errors);
+    state.repHistory = check.history;
+    confirmed = check.confirmed.filter(tag => m.event.errors.includes(tag));
+    observed = [...m.event.errors];
+  } else if (m.event?.type === 'attempt') {
+    confirmed = [...m.event.errors]; observed = [...m.event.errors];
+  }
+  const live = stepLiveErrors(state.liveErrors, m.live || [], now);
+  state.liveErrors = live.state;
+  const motion = {
+    event: m.event || null, milestone: m.milestone || null, hold: m.hold || null, counts: m.counts || {},
+    ready: Boolean(m.ready), activity: Boolean(m.activity), idle: m.idle || null, phase: m.phase || '',
+    confirmed: [...new Set([...confirmed, ...live.confirmed])], observed: [...observed, ...live.started],
+  };
   const obs = {
-    quality: 'good', points, visible: true,
-    kneeAngle: { left: leftAngle, right: rightAngle, mean: kneeMean },
-    softKnee: kneeMean < 178, supportKnee,
-    torsoTilt, shoulderSlope, torsoLean, armsSpread,
-    lift, raised, raisedSide, liftCompleted, liftHigh,
-    standingStill: standingStill && !raised, squat,
-    balanceSeconds: state.balanceSeconds, lifts: state.lifts, reps: state.reps,
-    hips, kneeY, legScale,
-    feet: [27, 28, 31, 32].map(i => points[i]).filter(visible).map(p => ({ x: p.x, y: p.y })),
+    quality: 'good', framing: null, points, visible: true, still, standingStill: still && !feet.raised,
+    ...feet, lifts: state.lifts, tilt: f.tilt, motion,
+    hips: { x: f.hipMid.x / aspect, y: f.hipMid.y },
+    kneeY: [f.kneeY[0], f.kneeY[1]].filter(Number.isFinite).reduce((sum, y, _, list) => sum + y / list.length, 0) || null,
+    legScale: f.legScale,
+    // Distance to the phone: legs shrink in a squat, the torso in a bend; the larger reading is the honest one.
+    scale: Math.max(f.legScale, f.torsoLen * 1.7),
+    feet: [27, 28, 31, 32].map(i => points[i]).filter(visibleRaw).map(p => ({ x: p.x, y: p.y })),
   };
   return { state, obs };
 }
@@ -281,8 +252,8 @@ export function createSession(skillId = 'football', { personality = 'calm' } = {
     skillId: skill.id, personality: personalityId(personality),
     lessonIndex: 0, lessonProgress: 0, lessonMemo: null, completedLessons: [], skippedLessons: [],
     courseComplete: false, pendingIntro: true,
-    lastCueAt: -Infinity, lastCueTag: '', lastCueKind: '', phraseIndex: {}, cueCount: 0, tagCounts: {},
-    lastQuality: 'missing',
+    phraseIndex: {}, cueCount: 0, tagCounts: {}, errorCounts: {},
+    policy: createPolicy(), cueMemo: null, lastCounts: {},
   };
 }
 
@@ -296,86 +267,125 @@ function lessonView(skill, session) {
     title: lesson?.title || 'Свободная практика', short: lesson?.short || 'Практика',
     goal: lesson?.goal || 'Все шаги выполнены. Продолжай в своём темпе.',
     progress: lesson ? Math.min(lesson.target, Math.floor(session.lessonProgress * 10) / 10) : 0,
-    target: lesson?.target || 0, unit: lesson?.unit || '', needsBall: Boolean(lesson?.needsBall),
+    target: lesson?.target || 0, unit: lesson?.unit || '', needsBall: Boolean(lesson?.needsBall), clean: Boolean(lesson?.clean),
     complete: session.courseComplete,
   };
 }
 
-function emit(session, now, tag, kind, bank, vars, { urgent = false, source = 'rule' } = {}) {
-  const elapsed = now - session.lastCueAt;
-  if (!urgent && elapsed < (COOLDOWN[kind] ?? COOLDOWN.tip)) return null;
-  if (tag === session.lastCueTag && elapsed < SAME_TAG_COOLDOWN && !urgent) return null;
+const UI_KIND = { lesson: 'lesson', safety: 'warning', framing: 'warning', attempt: 'tip', error: 'tip', praise: 'success', idle: 'tip' };
+const introText = (lesson, personality) => lesson.intro[personality] || lesson.intro.calm;
+
+function phrase(session, bank, tag) {
   const picked = pickPhrase(bank, session.personality, session.phraseIndex[tag] ?? -1, session.cueCount * 7 + session.lessonIndex * 3);
-  if (!picked.text) return null;
-  session.phraseIndex = { ...session.phraseIndex, [tag]: picked.index };
-  session.lastCueAt = now; session.lastCueTag = tag; session.lastCueKind = kind;
-  session.cueCount += 1;
-  session.tagCounts = { ...session.tagCounts, [tag]: (session.tagCounts[tag] || 0) + 1 };
-  return { text: fillTemplate(picked.text, vars), kind, tag, source };
+  if (picked.text) session.phraseIndex = { ...session.phraseIndex, [tag]: picked.index };
+  return picked.text;
 }
 
-/** Advances lessons and selects one coaching phrase. Pure: returns a new session. */
+/**
+ * Advances lessons and picks at most one remark for this frame. Pure: returns
+ * a new session. Lesson events always pass; everything else goes through the
+ * message budget, so the feed stays calm and the voice is never cut off.
+ */
 export function stepSession(previous, obs, ball, timestamp = 0) {
-  const session = { ...previous, completedLessons: [...previous.completedLessons], skippedLessons: [...previous.skippedLessons] };
+  const session = { ...previous, completedLessons: [...previous.completedLessons], skippedLessons: [...previous.skippedLessons], errorCounts: { ...previous.errorCounts } };
   const skill = getSkill(session.skillId);
   const now = Number.isFinite(timestamp) ? timestamp : 0;
   const safeBall = ball || createBallState();
+  const motion = obs.motion || null;
+  let policy = previous.policy || createPolicy();
+  if (policy.activityAt === null) policy = noteActivity(policy, now);
   const lesson = skill.lessons[session.lessonIndex] || null;
+  const counts = motion?.counts || session.lastCounts || {};
   const vars = {
     touches: safeBall.touches, streak: safeBall.event === 'drop' ? safeBall.lastStreak : safeBall.streak,
-    lifts: obs.lifts, reps: obs.reps, balanceSeconds: obs.balanceSeconds,
+    lifts: obs.lifts ?? 0, reps: counts.reps ?? 0, clean: counts.clean ?? 0, seconds: Math.floor(counts.hold ?? 0), best: Math.floor(counts.best ?? 0),
     lesson: lesson?.title || '', next: skill.lessons[session.lessonIndex + 1]?.title || '',
   };
-  let feedback = null;
-  const ctx = { obs, ball: safeBall, now, session, lesson };
-
+  const cues = [];
   if (session.pendingIntro && lesson) {
     session.pendingIntro = false;
-    feedback = emit(session, now, 'lesson-intro', 'lesson', { [session.personality]: [lesson.intro[session.personality] || lesson.intro.calm] }, vars, { urgent: true, source: 'lesson' });
+    cues.push({ kind: 'lesson', tag: 'lesson-intro', text: introText(lesson, session.personality) });
   }
 
+  policy = noteView(policy, obs.quality === 'good' ? null : obs.framing || 'no-person', now);
   if (obs.quality !== 'good') {
-    const tag = obs.quality === 'missing' ? 'no-person' : 'show-feet';
-    const urgent = session.lastQuality === 'good' || (tag === 'no-person' && session.lastQuality === 'partial');
-    session.lastQuality = obs.quality;
-    if (!feedback) feedback = emit(session, now, tag, 'warning', COMMON_PHRASES[tag], vars, { urgent });
-    return finish(skill, session, feedback, obs, safeBall);
+    const tag = obs.framing || 'no-person';
+    cues.push({ kind: 'framing', tag, bank: COMMON_PHRASES[tag] || COMMON_PHRASES['no-person'] });
+    return decide(skill, session, policy, cues, vars, obs, safeBall, now);
   }
-  session.lastQuality = 'good';
+  if (motion?.activity || motion?.event || safeBall.event) policy = noteActivity(policy, now);
+  // Mistakes are counted when they are observed, not when the coach mentions them.
+  for (const tag of motion?.observed || []) session.errorCounts[tag] = (session.errorCounts[tag] || 0) + 1;
 
   if (lesson && !session.courseComplete && !session.pendingIntro) {
-    const { progress, memo } = lesson.update(ctx, session.lessonMemo ?? undefined);
+    const { progress, memo } = lesson.update({ obs, motion, ball: safeBall, now, session }, session.lessonMemo ?? undefined);
     session.lessonProgress = progress; session.lessonMemo = memo;
     if (progress >= lesson.target) {
+      policy = noteActivity(policy, now); // finishing a step is activity too: no nudge right after it
       session.completedLessons.push(lesson.id);
       session.lessonIndex += 1; session.lessonProgress = 0; session.lessonMemo = null;
-      const done = session.lessonIndex >= skill.lessons.length;
-      if (done) session.courseComplete = true; else session.pendingIntro = true;
-      feedback = emit(session, now, done ? 'course-complete' : 'lesson-complete', 'success', COMMON_PHRASES[done ? 'course-complete' : 'lesson-complete'], vars, { urgent: true, source: 'lesson' });
-      return finish(skill, session, feedback, obs, safeBall);
+      const next = skill.lessons[session.lessonIndex];
+      if (!next) {
+        session.courseComplete = true;
+        cues.push({ kind: 'lesson', tag: 'course-complete', bank: COMMON_PHRASES['course-complete'] });
+      } else {
+        // One message for the finished step and the next one: «Готово. Шаг 2: …».
+        const praise = phrase(session, COMMON_PHRASES['lesson-done'], 'lesson-done');
+        cues.push({ kind: 'lesson', tag: 'lesson-complete', text: `${praise} ${introText(next, session.personality)}` });
+      }
     }
   }
 
-  if (!feedback) {
-    const rule = skill.rules.find(r => r.when(ctx));
-    if (rule) feedback = emit(session, now, rule.tag, rule.kind, skill.phrases[rule.tag], vars, { urgent: Boolean(rule.urgent) });
+  // A not-counted attempt is explained right away; a technique error once it repeats.
+  const attempted = motion?.event?.type === 'attempt' ? motion.event.errors : [];
+  const fromEvent = motion?.event ? motion.event.errors || [] : [];
+  for (const tag of motion?.confirmed || []) {
+    if (skill.phrases[tag]) cues.push({ kind: attempted.includes(tag) ? 'attempt' : 'error', tag, once: fromEvent.includes(tag), priority: skill.errors?.[tag]?.priority || 1, bank: skill.phrases[tag] });
   }
-  return finish(skill, session, feedback, obs, safeBall);
+  if (motion?.milestone && skill.phrases[motion.milestone.tag]) cues.push({ kind: 'praise', tag: motion.milestone.tag, bank: skill.phrases[motion.milestone.tag], vars: motion.milestone.vars });
+  const idleTag = motion?.idle || `${skill.id}-idle`;
+  if (skill.phrases[idleTag]) cues.push({ kind: 'idle', tag: idleTag, bank: skill.phrases[idleTag] });
+  let list = cues;
+  if (skill.cues) {
+    const extra = skill.cues({ obs, motion, ball: safeBall, lesson: skill.lessons[session.lessonIndex] || null, now, session }, list, session.cueMemo);
+    list = extra.cues; session.cueMemo = extra.memo;
+    for (const tag of extra.observed || []) session.errorCounts[tag] = (session.errorCounts[tag] || 0) + 1;
+  }
+  // Every cue needs words: its own bank, the skill's bank for its tag, or the shared one.
+  list = list.map(cue => (cue.text || cue.bank ? cue : { ...cue, bank: skill.phrases[cue.tag] || COMMON_PHRASES[cue.tag] })).filter(cue => cue.text || cue.bank);
+  return decide(skill, session, policy, list, vars, obs, safeBall, now);
+}
+
+function decide(skill, session, policy, cues, vars, obs, ball, now) {
+  const { policy: next, pick } = choose(policy, cues, now);
+  session.policy = next;
+  let feedback = null;
+  if (pick) {
+    const text = pick.text ?? phrase(session, pick.bank, pick.tag);
+    if (text) {
+      feedback = { text: fillTemplate(text, { ...vars, ...(pick.vars || {}) }), kind: UI_KIND[pick.kind] || 'tip', tag: pick.tag, source: pick.kind === 'lesson' ? 'lesson' : 'rule' };
+      session.cueCount += 1;
+      session.tagCounts = { ...session.tagCounts, [pick.tag]: (session.tagCounts[pick.tag] || 0) + 1 };
+    }
+  }
+  return finish(skill, session, feedback, obs, ball);
 }
 
 function finish(skill, session, feedback, obs, ball) {
-  return {
-    session, feedback, lesson: lessonView(skill, session),
-    metrics: {
-      touches: ball.touches, streak: ball.streak, bestStreak: ball.bestStreak, drops: ball.drops,
-      ballSeen: ball.seen, ballEverSeen: ball.everSeen,
-      lifts: obs.lifts, reps: obs.reps, balanceSeconds: obs.balanceSeconds,
-      visible: obs.quality === 'good', lessonsDone: session.completedLessons.length, cues: session.cueCount,
-    },
+  if (obs.motion?.counts) session.lastCounts = obs.motion.counts; // totals stay visible while out of view
+  const counts = session.lastCounts || {};
+  const metrics = {
+    touches: ball.touches, streak: ball.streak, bestStreak: ball.bestStreak, drops: ball.drops,
+    ballSeen: ball.seen, ballEverSeen: ball.everSeen,
+    lifts: obs.lifts ?? 0, reps: counts.reps || 0, clean: counts.clean || 0, left: counts.left || 0, right: counts.right || 0,
+    hold: Math.floor(counts.hold || 0), bestHold: Math.floor(counts.best || 0),
+    visible: obs.quality === 'good', lessonsDone: session.completedLessons.length, lessonIndex: session.lessonIndex,
+    completed: [...session.completedLessons], skipped: [...session.skippedLessons], cues: session.cueCount,
   };
+  return { session, feedback, lesson: lessonView(skill, session), metrics, result: skill.result(metrics) };
 }
 
-/** Manual skip (for example, no ball available). Recorded honestly. */
+/** Manual skip (for example, no ball available). Recorded honestly, never as completed. */
 export function skipLesson(previous) {
   const skill = getSkill(previous.skillId);
   const lesson = skill.lessons[previous.lessonIndex];
@@ -385,11 +395,11 @@ export function skipLesson(previous) {
   return session;
 }
 
-/** Most frequent corrective tag: the "main mistake" for the summary. */
+/** The most frequent observed mistake (not the most frequent remark): the summary's "main mistake". */
 export function mainMistake(session) {
-  const corrective = Object.entries(session.tagCounts || {}).filter(([tag]) => !['start', 'lesson-intro', 'lesson-complete', 'course-complete', 'no-person', 'show-feet', 'ball-touch', 'ball-streak', 'lift-done', 'squat-complete', 'balance-hold', 'squat-camera', 'balance-start'].includes(tag));
-  corrective.sort((a, b) => b[1] - a[1]);
-  return corrective[0] ? { tag: corrective[0][0], count: corrective[0][1] } : null;
+  const entries = Object.entries(session.errorCounts || {}).filter(([, count]) => count > 0);
+  entries.sort((a, b) => b[1] - a[1]);
+  return entries[0] ? { tag: entries[0][0], count: entries[0][1] } : null;
 }
 
 /**
@@ -461,6 +471,11 @@ export async function createCoachEngine({ onStatus = () => {}, ball = true, obje
       lastTimestamp = -1; lastBallAt = -Infinity; lastObjects = [];
     },
     skip() { session = skipLesson(session); },
+    /** After a camera switch the old frame geometry is meaningless; the lesson and totals stay. */
+    resetTracking() {
+      pose = { ...createPoseState(), lifts: pose.lifts, motion: pauseMemo(pose.motion) };
+      ballState = { ...ballState, seen: false, phase: null, event: null }; lastTimestamp = -1;
+    },
     get session() { return session; },
     analyze(video, timestamp) {
       if (closed) throw new Error('AI-сессия уже завершена. Начни новую тренировку.');
@@ -488,8 +503,6 @@ export async function createCoachEngine({ onStatus = () => {}, ball = true, obje
         // Pose keeps priority: slow frames push the ball detector to a lower rate.
         const total = performance.now() - started;
         ballInterval = total > 110 ? Math.min(400, ballInterval + 40) : Math.max(120, ballInterval - 10);
-      } else if (!detector || !skillNeedsBall) {
-        ballState = { ...ballState, event: null };
       } else {
         ballState = { ...ballState, event: null };
       }
@@ -497,10 +510,11 @@ export async function createCoachEngine({ onStatus = () => {}, ball = true, obje
       session = stepped.session;
       return {
         landmarks: observed.obs.points, ball: ballState.seen ? { x: ballState.x, y: ballState.y, r: ballState.r } : null,
-        quality: observed.obs.quality, feedback: stepped.feedback, lesson: stepped.lesson, metrics: stepped.metrics,
+        quality: observed.obs.quality, framing: observed.obs.framing, feedback: stepped.feedback, lesson: stepped.lesson, metrics: stepped.metrics,
+        result: stepped.result, motion: observed.obs.motion,
         objects: frameTimestamp - lastBallAt <= 700 ? lastObjects : [],
         timing: { poseMs }, ballDetector: Boolean(detector), objectDetector: Boolean(detector),
-        scale: observed.obs.quality === 'good' ? observed.obs.legScale : null,
+        scale: observed.obs.quality === 'good' ? observed.obs.scale : null,
       };
     },
     close() { if (!closed) { closed = true; landmarker.close(); detector?.close(); } },
