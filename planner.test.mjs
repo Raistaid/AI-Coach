@@ -19,6 +19,7 @@ test('keyword planner adds balance for a complete beginner and squats for leg st
   assert.deepEqual(keywordPlan('никогда не играл, хочу чеканить с нуля', SKILL_LIST).plan, ['balance', 'football']);
   assert.deepEqual(keywordPlan('Хочу укрепить ноги перед футболом', SKILL_LIST).plan, ['squats', 'football']);
   assert.deepEqual(keywordPlan('Хочу много узнать', SKILL_LIST).plan, [], '"много" must not match "ноги"');
+  assert.deepEqual(keywordPlan('дарова ты шаришь за футбик', SKILL_LIST).plan, ['football'], 'slang for football still finds the skill');
 });
 
 test('an unknown goal yields an empty plan and an honest reply naming the catalog', () => {
@@ -82,4 +83,16 @@ test('russian plural forms', () => {
   assert.equal(pluralize(6, ['шаг', 'шага', 'шагов']), '6 шагов');
   assert.equal(pluralize(11, ['минута', 'минуты', 'минут']), '11 минут');
   assert.equal(pluralize(22, ['минута', 'минуты', 'минут']), '22 минуты');
+});
+
+test('answers to the coach\'s own question find a skill; Cyrillic word edges hold', () => {
+  const plan = (q) => keywordPlan(q, SKILL_LIST).plan;
+  assert.deepEqual(plan('ноги'), ['squats'], 'the coach asks «мяч, ноги или равновесие?»');
+  assert.deepEqual(plan('мяч'), ['football']);
+  assert.deepEqual(plan('равновесие'), ['balance']);
+  assert.deepEqual(plan('хочу силу'), ['squats']);
+  assert.deepEqual(plan('сильные ноги'), ['squats']);
+  assert.deepEqual(plan('бью стопой'), ['football']);
+  assert.deepEqual(plan('хочу много узнать'), [], 'a stem inside another word does not count');
+  assert.deepEqual(plan('стоять на одной ноге'), ['balance'], 'one-leg stance is balance, not squats');
 });

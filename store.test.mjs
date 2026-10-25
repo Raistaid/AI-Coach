@@ -22,6 +22,9 @@ test('preferences fall back to safe defaults', () => {
   const p = sanitizePrefs({ skill: 'nope', personality: 'angry', llmModel: 'giant', plan: ['football', 'x', 'balance', 'squats', 'football'], theme: 'neon', voice: 'yes' });
   assert.equal(p.skill, 'football'); assert.equal(p.personality, 'calm'); assert.equal(p.llmModel, 'default');
   assert.deepEqual(p.plan, ['football', 'balance', 'squats']); assert.equal(p.theme, 'system'); assert.equal(p.voice, true);
+  assert.equal(p.facing, 'user', 'front camera by default: the athlete must see the screen');
+  assert.equal(sanitizePrefs({ facing: 'environment' }).facing, 'environment');
+  assert.equal(sanitizePrefs({ facing: 'sideways' }).facing, 'user');
 });
 
 test('day streak counts consecutive training days back from today or yesterday', () => {
@@ -44,6 +47,9 @@ test('opening the app reuses an untouched chat instead of creating a new one', (
   assert.equal(second.chats.length, 1, 'no second empty chat');
   assert.equal(second.thread.id, first.thread.id);
   assert.equal(second.thread.messages[0].text, 'Добрый день!', 'greeting refreshed');
+  const later = freshThread(second.chats, 'Доброе утро!', { now: '2026-10-26T08:00:00Z' });
+  assert.equal(later.thread.messages[0].at, '2026-10-26T08:00:00Z', 'greeting time refreshed, no stale day separator');
+  assert.equal(later.thread.updatedAt, '2026-10-26T08:00:00Z');
   const { thread: used } = appendMessage(second.thread, { role: 'user', text: 'хочу чеканить' });
   const third = freshThread(replaceThread(second.chats, used), 'Привет!');
   assert.equal(third.chats.length, 2, 'a used chat stays and a new one is opened');
