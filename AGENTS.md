@@ -25,7 +25,7 @@
 |---|---|---|
 | frontend | index.html, styles.css, app/ui.js, app/chat.js: вход, чат, каталог, прогресс, профиль, экран эфира, адаптивность, доступность | app/main.js, app/live.js, coach-engine.js, skills/, coach-llm.js |
 | vision | coach-engine.js, skills/*, engine.test.mjs: поза, мяч, уроки, правила, банк фраз, тесты | интерфейс, app/ |
-| coach-llm | coach-llm.js, llm-worker.js, coach-planner.js, llm.test.mjs, planner.test.mjs: WebLLM, промпт тренера, подбор навыков, проверка ответов | зрение, интерфейс |
+| coach-llm | coach-llm.js, llm-worker.js, coach-planner.js, coach-talk.js, llm.test.mjs, planner.test.mjs, talk.test.mjs: WebLLM, промпт тренера, подбор навыков, разговор в чате, проверка ответов | зрение, интерфейс |
 | qa | docs/TEST_PLAN.md, docs/AI_STRATEGY.md: приёмка, проверка на телефонах, журнал дефектов с цифрами | исходники без согласования с root |
 | feature_developer | docs/FEATURE_ROADMAP.md, новые модули функций и их тесты по контракту root | существующие файлы других ролей без назначения; сборка и публикация |
 | root | app/main.js, app/live.js, app/store.js, store.test.mjs, scripts/, .github/workflows/: интеграция, данные на устройстве, сборка, публикация на GitHub Pages, финальная проверка | — |

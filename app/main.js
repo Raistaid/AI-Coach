@@ -13,6 +13,7 @@ import { russianVoices, voiceKey } from './speech.js';
 import { LOCAL_VOICES, localVoice } from './voice-models.js';
 import { trainerAudio } from './trainer-audio.js';
 import { initViewport } from './viewport.js';
+import { metricPhrase } from '../coach-talk.js';
 
 store.migrateLegacyKeys();
 const app = $('app');
@@ -41,7 +42,7 @@ function applyTheme() {
   for (const meta of themeMetas) {
     const systemDark = (meta.getAttribute('media') || '').includes('dark');
     const dark = prefs.theme === 'system' ? systemDark : prefs.theme === 'dark';
-    meta.setAttribute('content', dark ? '#000000' : '#ffffff');
+    meta.setAttribute('content', dark ? '#242526' : '#ffffff');
   }
 }
 
@@ -192,7 +193,7 @@ function renderProgress() {
     const row = el('div', 'history-row');
     row.append(el('span', 'skill-emoji', skill.emoji));
     const copy = el('div');
-    copy.append(el('b', null, skill.name), el('small', null, [relativeDate(session.date), formatTime(session.seconds), `${session.metricValue ?? session.movements ?? 0} ${session.metricLabel || ''}`, session.source === 'camera' ? 'Камера' : session.source === 'file' ? 'Видео' : 'Источник не указан', `шагов ${session.lessonsDone}/${session.lessonsTotal}`, session.bestStreak ? `серия ${session.bestStreak}` : ''].filter(Boolean).join(' · ')));
+    copy.append(el('b', null, skill.name), el('small', null, [relativeDate(session.date), formatTime(session.seconds), metricPhrase(session.metricValue ?? session.movements ?? 0, session.metricLabel || ''), session.source === 'camera' ? 'Камера' : session.source === 'file' ? 'Видео' : 'Источник не указан', `шагов ${session.lessonsDone}/${session.lessonsTotal}`, session.bestStreak ? `серия ${session.bestStreak}` : ''].filter(Boolean).join(' · ')));
     const progress = compareProgress(session, history.filter((_, otherIndex) => otherIndex !== index));
     copy.append(el('p', `history-progress${progress?.isNewBest ? ' is-best' : ''}`, progress ? progress.text : 'Для этой записи сравнение недоступно.'));
     row.append(copy); list.append(row);
@@ -313,7 +314,8 @@ function renderLocalVoiceControls() {
   $('previewCoachVoice').disabled = voice ? !ready || trainerAudio.downloading : !window.speechSynthesis;
   $('cancelVoiceDownload').hidden = !trainerAudio.downloading;
   const bar = $('voiceDownloadProgress'); bar.hidden = !trainerAudio.downloading; bar.value = state?.progress || 0;
-  text('voiceDownloadStatus', voice && !trainerAudio.supported ? 'Для скачиваемых голосов нужен браузер с локальным хранилищем и Web Audio. Выбери системный голос.' : trainerAudio.status || (voice ? 'Один раз скачай голос. При первом запуске также загрузится модуль озвучивания.' : 'Выбранный голос озвучивает подсказки и ответы в эфире.'));
+  const message = trainerAudio.statusVoiceId === prefs.voiceId ? trainerAudio.status : '';
+  text('voiceDownloadStatus', voice && !trainerAudio.supported ? 'Для скачиваемых голосов нужен браузер с локальным хранилищем и Web Audio. Выбери системный голос.' : message || (ready ? 'Голос скачан. Нажми «Прослушать голос», чтобы выбрать звучание.' : voice ? 'Один раз скачай голос. При первом запуске также загрузится модуль озвучивания.' : 'Выбранный голос озвучивает подсказки и ответы в эфире.'));
 }
 trainerAudio.onChange(() => { renderLocalVoiceControls(); renderModels(); });
 $('coachVoiceSelect').addEventListener('change', () => { trainerAudio.release(); prefs.voiceId = $('coachVoiceSelect').value; store.savePrefs(prefs); renderLocalVoiceControls(); trainerAudio.refresh(); });

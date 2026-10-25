@@ -9,7 +9,7 @@ export function createTrainerAudio({ store = createVoiceStore(), makeWorker = ()
   const states = Object.fromEntries(LOCAL_VOICES.map(v => [v.id, { status: 'unknown', progress: 0 }]));
   const versions = Object.fromEntries(LOCAL_VOICES.map(v => [v.id, 0]));
   let audioContext, worker, workerVoice, request = null, source, download = null, serial = 0, nextId = 0, playing = false;
-  let status = '';
+  let status = '', statusVoiceId = '';
   const notify = message => { if (message !== undefined) status = message; for (const fn of listeners) fn(); };
   function stopWorker(error = abortError()) { const old = request; request = null; worker?.terminate(); worker = null; workerVoice = null; if (old) { clearTimeout(old.timer); old.reject(error); } }
   function cancel({ release = false } = {}) {
@@ -47,6 +47,7 @@ export function createTrainerAudio({ store = createVoiceStore(), makeWorker = ()
     get speaking() { return playing || Boolean(request) || Boolean(synth()?.speaking); },
     get downloading() { return Boolean(download); },
     get status() { return status; },
+    get statusVoiceId() { return statusVoiceId; },
     get states() { return Object.fromEntries(Object.entries(states).map(([key, value]) => [key, { ...value }])); },
     onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     unlock,
@@ -64,6 +65,7 @@ export function createTrainerAudio({ store = createVoiceStore(), makeWorker = ()
       const voice = localVoice(id); if (!voice) throw new Error('Неизвестный голос.');
       if (download) throw new Error('Дождись текущего скачивания.');
       versions[id]++;
+      statusVoiceId = id;
       const controller = new AbortController(); download = { voiceId: id, controller, promise: null };
       states[id] = { status: 'downloading', progress: 0 }; notify(`Скачиваем голос «${voice.name}»…`);
       const job = store.download(voice, { signal: controller.signal, onProgress(progress) { if (controller.signal.aborted) return; states[id].progress = progress; notify(`Скачивание голоса: ${Math.floor(progress * 100)}%`); } });
@@ -76,6 +78,7 @@ export function createTrainerAudio({ store = createVoiceStore(), makeWorker = ()
     async speak(raw, prefs, personality, { timeoutMs = 45000 } = {}) {
       const text = String(raw || '').trim().slice(0, 280); if (!text) return false;
       cancel(); const run = serial; const voice = localVoice(prefs.voiceId);
+      statusVoiceId = prefs.voiceId || '';
       if (!voice) return systemSpeak(text, prefs, personality);
       unlock();
       try {

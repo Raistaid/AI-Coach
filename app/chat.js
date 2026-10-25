@@ -5,6 +5,7 @@ import { SKILL_LIST, getSkill, PERSONALITIES } from '../skills/index.js';
 import { keywordPlan, buildPlannerMessages, parsePlan, planReplyText, pluralize } from '../coach-planner.js';
 import { $, text, el, icon, toast, haptic, bus, timeLabel, relativeDate, formatTime } from './ui.js';
 import * as store from './store.js';
+import { detectIntent, looksLikeGoal, talkReply, STRONG_INTENTS } from '../coach-talk.js';
 
 const ctx = { prefs: null, profile: null, history: [], chats: [], thread: null, ensureLiveCoach: null, getLiveCoach: null, busy: false, llmHistory: [] };
 const steps = (n) => pluralize(n, ['шаг', 'шага', 'шагов']);
@@ -179,10 +180,12 @@ function summaryCard(data) {
 
 function renderChips() {
   const chips = $('chatChips'); chips.replaceChildren();
-  const fresh = store.isFresh(ctx.thread);
-  const items = fresh
-    ? ['Хочу научиться чеканить, но мяч падает', 'Хочу укрепить ноги', 'Не знаю, с чего начать', 'Покажи демо']
-    : ['Начать эфир', 'Покажи демо', 'Другая цель'];
+  const last = [...ctx.thread.messages].reverse().find(m => m.role !== 'system');
+  // Quick replies follow the conversation: after a session they are about that session.
+  const items = store.isFresh(ctx.thread) ? ['Хочу научиться чеканить, но мяч падает', 'Хочу укрепить ноги', 'Не знаю, с чего начать', 'Покажи демо']
+    : last?.type === 'summary' ? ['Как у меня получилось?', 'Повторить эфир', 'Другой навык', 'Как дела?']
+    : last?.role === 'coach' && last.offer ? ['Давай', 'Не сейчас', 'Покажи демо']
+    : ['Начать эфир', 'Как дела?', 'Покажи демо', 'Другая цель'];
   for (const label of items) {
     const chip = el('button', 'chip', label); chip.type = 'button';
     chip.addEventListener('click', () => send(label));
@@ -244,7 +247,7 @@ export async function send(raw, { fromInput = false } = {}) {
       bus.emit('gesture'); // iOS speaks only if voice was unlocked inside the tap
       await coachSays('Запускаю демо на нарисованном спортсмене. Это симуляция интерфейса, а не анализ камеры.');
       bus.emit('start-live', { skillId: ctx.prefs.skill, mode: 'demo' });
-    } else if (/^(начать эфир|начни|поехали|старт|начать)([\s!.,]|$)/.test(q)) {
+    } else if (/^(начать эфир|начни|поехали|старт|начать|повторить( эфир)?|повтори)([\s!.,]|$)/.test(q)) {
       bus.emit('gesture');
       const skill = getSkill(ctx.prefs.skill);
       await coachSays(`Открываю эфир: ${skill.name}. ${skill.camera}`);
@@ -253,12 +256,44 @@ export async function send(raw, { fromInput = false } = {}) {
       await coachSays('Давай так: что ближе одним словом, мяч, ноги или равновесие? Или нажми на навык в кружках сверху, расскажу о нём.');
     } else if (/^(другая цель|другой навык)/.test(q)) {
       await coachSays('Напиши новую цель своими словами, соберу маршрут заново.');
-    } else if (/^(привет|приветик|здравствуй(те)?|хай|йо|дарова|здорово|салют|hi|hello)[\s!.,)]*$/.test(q)) {
-      await coachSays(`Привет, ${ctx.profile.name}! Чему хочешь научиться сегодня?`);
     } else {
-      await plan(query);
+      await respond(query);
     }
   } finally { ctx.busy = false; $('chatSend').disabled = false; }
+}
+
+/** What the small-talk replies may rely on: only real data from this device. */
+function talkContext() {
+  const messages = ctx.thread.messages;
+  const summary = [...messages].reverse().find(m => m.type === 'summary')?.data || null;
+  const lastCoach = [...messages].reverse().find(m => m.role === 'coach');
+  const record = ctx.history[0] || null;
+  return {
+    name: ctx.profile?.name || 'друг', personality: ctx.prefs.personality, summary,
+    stats: store.historyStats(ctx.history),
+    lastRecord: record ? { skillName: getSkill(record.skill).name, lessonsDone: record.lessonsDone, lessonsTotal: record.lessonsTotal } : null,
+    skillName: getSkill(ctx.prefs.skill).name,
+    canStart: Boolean(lastCoach && (['route', 'skill', 'summary'].includes(lastCoach.type) || lastCoach.offer)),
+  };
+}
+
+/**
+ * Order: pain, results, «как дела», help → a skill named in the message → other small talk →
+ * a stated goal (may honestly get «такого навыка пока нет») → a friendly «не понял».
+ */
+async function respond(query) {
+  const intent = detectIntent(query);
+  const hasSkillWords = keywordPlan(query, SKILL_LIST).plan.length > 0;
+  if (intent && (STRONG_INTENTS.has(intent) || !hasSkillWords)) return talk(intent);
+  if (hasSkillWords || looksLikeGoal(query)) return plan(query);
+  return talk(null);
+}
+async function talk(intent) {
+  const context = talkContext();
+  const reply = talkReply(intent, context, ctx.thread.messages.length);
+  if (reply.action === 'start') bus.emit('gesture'); // still inside the tap: unlocks voice on iOS
+  await coachSays(reply.text, reply.offer ? { offer: true } : {});
+  if (reply.action === 'start') bus.emit('start-live', { skillId: ctx.prefs.skill, mode: 'camera' });
 }
 
 const LLM_REPLY_TIMEOUT_MS = 25000;

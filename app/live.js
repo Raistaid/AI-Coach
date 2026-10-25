@@ -402,7 +402,7 @@ function drawPose(landmarks, ball, objects = []) {
     c.fillStyle = '#001b2de6'; c.fillRect(x, y - 18, labelWidth, 18); c.fillStyle = '#fff'; c.fillText(object.label, x + 5, y - 5);
   }
   if (landmarks?.length && ctx.prefs.skeleton) {
-    c.lineWidth = 2.5; c.strokeStyle = 'rgba(255,255,255,.85)'; c.fillStyle = '#ffffff';
+    c.lineWidth = 2.5; c.strokeStyle = 'rgba(255,255,255,.85)'; c.fillStyle = '#2d88ff';
     for (const [a, b] of POSE_CONNECTIONS) { const p = landmarks[a], q = landmarks[b]; if (!p || !q || (p.visibility ?? 1) < .5 || (q.visibility ?? 1) < .5) continue; const u = point(p), v = point(q); c.beginPath(); c.moveTo(u.x, u.y); c.lineTo(v.x, v.y); c.stroke(); }
     for (const p of landmarks) { if ((p.visibility ?? 1) < .5) continue; const v = point(p); c.beginPath(); c.arc(v.x, v.y, 3.5, 0, Math.PI * 2); c.fill(); }
   }
@@ -438,7 +438,7 @@ function demoBall(seconds, phase, foot) {
 }
 function renderDemo(now) {
   const { ctx: c, width: w, height: h } = canvasContext(demoCanvas); c.clearRect(0, 0, w, h);
-  const gradient = c.createLinearGradient(0, 0, w, h); gradient.addColorStop(0, '#1c1c24'); gradient.addColorStop(1, '#0a0a0f'); c.fillStyle = gradient; c.fillRect(0, 0, w, h);
+  const gradient = c.createLinearGradient(0, 0, w, h); gradient.addColorStop(0, '#1c1e21'); gradient.addColorStop(1, '#0b0c0e'); c.fillStyle = gradient; c.fillRect(0, 0, w, h);
   c.strokeStyle = 'rgba(255,255,255,.06)'; c.lineWidth = 1;
   for (let n = 0; n < 9; n++) { c.beginPath(); c.moveTo(w / 2, h * .38); c.lineTo(w * (n / 8), h); c.stroke(); }
   for (let n = 0; n < 7; n++) { const y = h * (.47 + n * .085); c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke(); }
@@ -449,7 +449,7 @@ function renderDemo(now) {
   c.lineCap = 'round'; c.lineJoin = 'round'; c.lineWidth = w * .026; c.strokeStyle = '#e8e8ee';
   for (const [a, b] of parts) { const u = map(points[a]), v = map(points[b]); c.beginPath(); c.moveTo(u.x, u.y); c.lineTo(v.x, v.y); c.stroke(); }
   const head = map(points[0]); c.fillStyle = '#f4f4f8'; c.beginPath(); c.arc(head.x, head.y, w * .049, 0, Math.PI * 2); c.fill();
-  c.fillStyle = '#ee2a7b';
+  c.fillStyle = '#2d88ff';
   for (const i of [11, 12, 13, 14, 23, 24, 25, 26, 27, 28]) { const v = map(points[i]); c.beginPath(); c.arc(v.x, v.y, 4, 0, Math.PI * 2); c.fill(); }
   const detections = demoBall(seconds, phase, points[32]);
   if (detections[0]) { const b = map(detections[0]); c.fillStyle = '#ffd166'; c.beginPath(); c.arc(b.x, b.y, w * .042, 0, Math.PI * 2); c.fill(); }

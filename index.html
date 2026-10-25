@@ -4,19 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#242526" media="(prefers-color-scheme: dark)">
   <meta name="description" content="Aimo — нейро-тренер в прямом эфире: чат с тренером, вертикальный эфир с камеры, распознавание позы и мяча на устройстве.">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Aimo</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='1' x2='1' y2='0'%3E%3Cstop offset='0' stop-color='%23f9ce34'/%3E%3Cstop offset='.5' stop-color='%23ee2a7b'/%3E%3Cstop offset='1' stop-color='%236228d7'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='18' fill='url(%23g)'/%3E%3Cpath d='M18 44 29 20h6l11 24h-7l-2.4-6H27.4L25 44z' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%230866ff'/%3E%3Cpath d='M18 44 29 20h6l11 24h-7l-2.4-6H27.4L25 44z' fill='%23fff'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
-    <linearGradient id="ig" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#f9ce34"/><stop offset=".5" stop-color="#ee2a7b"/><stop offset="1" stop-color="#6228d7"/></linearGradient>
     <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
     <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/><path d="M12 8v8M8 12h8"/></symbol>
@@ -41,6 +40,9 @@
     <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 2 2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5z"/></symbol>
     <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol>
     <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14M3 10h4M3 14h4M17 10h4M17 14h4"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M12 3.5c-4.7 0-8.5 3.4-8.5 7.6 0 2.3 1.1 4.3 2.9 5.7v3.7l3.3-1.8c.7.2 1.5.3 2.3.3 4.7 0 8.5-3.4 8.5-7.6S16.7 3.5 12 3.5z"/><path d="m7.5 13 3-3.2 2.2 2.2 3.8-3.5"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M5 20V12M10.5 20V5M16 20v-9M21 20H3"/></symbol>
+    <symbol id="i-add" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
     <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14m-6-6 6 6 6-6"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
@@ -51,7 +53,8 @@
 
   <section class="screen screen-login" data-screen="login" aria-label="Вход">
     <form id="loginForm" class="login-card" autocomplete="off">
-      <h1 class="logo">Aimo</h1>
+      <div class="logo-mark" aria-hidden="true">a</div>
+      <h1 class="logo">aimo</h1>
       <p class="login-tagline">Нейро-тренер в прямом эфире</p>
       <label class="field"><span>Как тебя зовут?</span><input id="loginName" maxlength="24" placeholder="Имя" required autocomplete="given-name"></label>
       <div class="avatar-pick" role="radiogroup" aria-label="Цвет аватара" id="loginAvatars"></div>
@@ -72,8 +75,8 @@
     <header class="topbar">
       <button id="openDrawer" class="icon-btn" aria-label="Открыть историю чатов" aria-controls="drawer" aria-expanded="false"><svg class="ic"><use href="#i-menu"/></svg></button>
       <div class="topbar-title">
-        <span class="avatar ring coach" aria-hidden="true"><svg class="ic"><use href="#i-spark"/></svg></span>
-        <div><strong id="chatTitle">Aimo тренер</strong><small id="chatSub">в сети · ИИ на устройстве</small></div>
+        <span class="avatar coach online" aria-hidden="true"><svg class="ic"><use href="#i-spark"/></svg></span>
+        <div><strong id="chatTitle">Тренер Aimo</strong><small id="chatSub">в сети · ИИ на устройстве</small></div>
       </div>
       <button id="newChatBtn" class="icon-btn" aria-label="Новый чат"><svg class="ic"><use href="#i-edit"/></svg></button>
     </header>
@@ -90,7 +93,7 @@
   <section class="screen screen-catalog" data-screen="catalog" aria-label="Навыки">
     <header class="topbar"><div class="topbar-title"><div><strong>Навыки</strong><small>Переход между шагами только по реальным движениям</small></div></div></header>
     <div id="catalogGrid" class="catalog-grid"></div>
-    <p class="muted-note">В каталоге только работающие навыки. Новый навык добавляется одним файлом в <code>skills/</code>.</p>
+    <p class="muted-note plain">В каталоге только работающие навыки. Новый навык добавляется одним файлом в <code>skills/</code>.</p>
   </section>
 
   <section class="screen screen-progress" data-screen="progress" aria-label="Прогресс">
@@ -101,21 +104,23 @@
       <div><b id="statStreak">0</b><span>лучшая серия</span></div>
       <div><b id="statDays">0</b><span>дней подряд</span></div>
     </div>
+    <h3 class="section-title">Эфиры</h3>
     <div id="historyList" class="history"></div>
   </section>
 
   <section class="screen screen-profile" data-screen="profile" aria-label="Профиль">
-    <header class="topbar"><div class="topbar-title"><div><strong>Профиль</strong><small>Тренер, эфир и оформление</small></div></div><button id="logoutBtn" class="text-btn">Выйти</button></header>
-    <div class="profile-head">
-      <span id="profileAvatar" class="avatar big ring"></span>
+    <header class="topbar"><div class="topbar-title"><div><strong>Профиль</strong><small>Тренер, эфир и оформление</small></div></div></header>
+    <div class="profile-card">
+      <span id="profileAvatar" class="avatar big"></span>
       <div class="profile-name"><input id="profileNameInput" maxlength="24" aria-label="Имя"><small id="profileSince"></small></div>
+      <div class="avatar-pick" id="profileAvatars" role="radiogroup" aria-label="Цвет аватара"></div>
     </div>
-    <div class="avatar-pick" id="profileAvatars" role="radiogroup" aria-label="Цвет аватара"></div>
 
     <h3 class="section-title">Характер тренера</h3>
     <div id="personalityRow" class="personalities" role="radiogroup" aria-label="Характер тренера"></div>
 
     <h3 class="section-title">Эфир</h3>
+    <div class="group">
     <label class="row"><span><strong>Голос тренера</strong><small>Озвучивать подсказки</small></span><input id="voiceInput" type="checkbox" class="switch"></label>
     <label class="row voice-choice"><span><strong>Выбрать голос</strong><small id="voiceHint">Голоса загружаются из браузера и системы</small></span><select id="coachVoiceSelect" aria-label="Голос тренера"></select></label>
     <div class="voice-actions">
@@ -131,6 +136,8 @@
     <label class="row"><span><strong>Зеркальное видео</strong><small>Привычный вид с фронтальной камеры</small></span><input id="mirrorInput" type="checkbox" class="switch"></label>
     <label class="row"><span><strong>Детектор предметов</strong><small>Отмечает людей, мяч, бутылки, стулья и другие знакомые модели предметы. Касания считаются только по мячу.</small></span><input id="objectsInput" type="checkbox" class="switch" checked></label>
 
+    </div>
+
     <h3 class="section-title">Локальные модели</h3>
     <p class="muted-note">Выбери модель и скачай её отдельно. После загрузки она хранится в кеше этого браузера. Нужны интернет, WebGPU и свободное место.</p>
     <div id="liveCoachBox" class="llm-box">
@@ -144,16 +151,20 @@
     <label class="row"><span><strong>Использовать живого тренера · бета</strong><small id="liveCoachHint">Для выбранной скачанной модели: ответы в чате и эфире. Без неё работают подсказки по правилам.</small></span><input id="liveCoachInput" type="checkbox" class="switch"></label>
 
     <h3 class="section-title">Оформление</h3>
-    <label class="row"><span><strong>Тема</strong><small>Как в системе, светлая или тёмная</small></span><select id="themeSelect" aria-label="Тема"><option value="system">Системная</option><option value="light">Светлая</option><option value="dark">Тёмная</option></select></label>
-    <p class="muted-note"><svg class="ic"><use href="#i-lock"/></svg> Профиль и история хранятся на устройстве. Видео не отправляется. Голосовые вопросы распознаёт браузер; аудио может обрабатываться его сервисом.</p>
+    <div class="group">
+      <label class="row"><span><strong>Тема</strong><small>Как в системе, светлая или тёмная</small></span><select id="themeSelect" aria-label="Тема"><option value="system">Системная</option><option value="light">Светлая</option><option value="dark">Тёмная</option></select></label>
+    </div>
+
+    <button id="logoutBtn" class="btn-ghost danger wide" type="button">Выйти из профиля</button>
+    <p class="muted-note center"><svg class="ic"><use href="#i-lock"/></svg> Профиль и история хранятся на устройстве. Видео не отправляется. Голосовые вопросы распознаёт браузер; аудио может обрабатываться его сервисом.</p>
   </section>
 
   <nav class="tabbar" aria-label="Разделы">
-    <button class="tab" data-tab="chat" aria-label="Чат" aria-current="page"><svg class="ic"><use href="#i-home"/></svg></button>
-    <button class="tab" data-tab="catalog" aria-label="Навыки"><svg class="ic"><use href="#i-grid"/></svg></button>
-    <button class="tab tab-live" data-tab="live" aria-label="Начать эфир"><svg class="ic"><use href="#i-plus"/></svg></button>
-    <button class="tab" data-tab="progress" aria-label="Прогресс"><svg class="ic"><use href="#i-heart"/></svg></button>
-    <button class="tab tab-profile" data-tab="profile" aria-label="Профиль"><span id="tabAvatar" class="avatar tiny"></span></button>
+    <button class="tab" data-tab="chat" aria-label="Чат" aria-current="page"><svg class="ic"><use href="#i-chat"/></svg><span class="tab-label">Чат</span></button>
+    <button class="tab" data-tab="catalog" aria-label="Навыки"><svg class="ic"><use href="#i-grid"/></svg><span class="tab-label">Навыки</span></button>
+    <button class="tab tab-live" data-tab="live" aria-label="Начать эфир"><span class="tab-fab"><svg class="ic"><use href="#i-add"/></svg></span><span class="tab-label">Эфир</span></button>
+    <button class="tab" data-tab="progress" aria-label="Прогресс"><svg class="ic"><use href="#i-chart"/></svg><span class="tab-label">Прогресс</span></button>
+    <button class="tab tab-profile" data-tab="profile" aria-label="Профиль"><span id="tabAvatar" class="avatar tiny"></span><span class="tab-label">Профиль</span></button>
   </nav>
 
   <div class="sheet-backdrop" data-sheet-backdrop hidden></div>
