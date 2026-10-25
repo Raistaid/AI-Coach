@@ -4,11 +4,10 @@
 
 Нейро-тренер, который помогает осваивать движения через камеру телефона. Человек выбирает навык, ставит телефон перед собой и получает подсказки по технике, счёт повторов и итог тренировки. Восемь навыков: от чеканки мяча и баланса до приседаний, отжиманий и планки. Интерфейс на русском.
 
-Хакатон HSE Sber Mobile Hack — [cs.hse.ru/sber/mobile-hack](https://cs.hse.ru/sber/mobile-hack).
 
-ВШЭ × Сбер · команда **noMad**.
+ВШЭ × VibeHack 2026 · команда **noMad**.
 
-**Разработчики:** [P-aralla-x](https://github.com/P-aralla-x) · [swag-alot](https://github.com/swag-alot) · [Raistaid](https://github.com/Raistaid) · [meazuk1](https://github.com/meazuk1).
+**Разработчики:** [Raistaid](https://github.com/Raistaid) · [meazuk1](https://github.com/meazuk1).
 
 Релиз **0.0.3** — [исходный код версии](https://github.com/noMad-dreamteam/Aimo/tree/v0.0.3).
 
