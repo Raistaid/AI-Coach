@@ -89,7 +89,6 @@ function renderThread() {
     if (day !== lastDay) { list.append(el('div', 'day-sep', day)); lastDay = day; }
     list.append(messageNode(message));
   }
-  renderHeader();
   stick = true; setJump(false); renderChips(); scrollBottom();
 }
 function appendNode(message) {

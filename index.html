@@ -63,7 +63,6 @@
       <h1 class="logo">aimo</h1>
       <p class="login-tagline">Нейро-тренер в прямом эфире</p>
       <label class="field"><span>Как тебя зовут?</span><input id="loginName" maxlength="24" placeholder="Имя" required autocomplete="given-name"></label>
-      <div class="avatar-pick" role="radiogroup" aria-label="Цвет аватара" id="loginAvatars"></div>
       <button id="loginSubmit" class="btn-primary" type="submit">Войти</button>
       <p class="login-note"><svg class="ic"><use href="#i-lock"/></svg> Профиль хранится на этом устройстве. Без пароля, сервера и отправки видео.</p>
     </form>
@@ -100,14 +99,9 @@
     <div id="catalogGrid" class="catalog"></div>
   </section>
 
-  <section class="screen screen-start" data-screen="start" aria-label="Эфир">
-    <header class="topbar"><div class="topbar-title"><div><strong>Эфир</strong><small>Выбери навык и начни тренировку</small></div></div></header>
-    <div id="startList" class="start-list" role="radiogroup" aria-label="Навык для эфира"></div>
-    <div class="start-actions">
-      <p class="camera-hint"><svg class="ic"><use href="#i-camera"/></svg><span id="startCamera"></span></p>
-      <button id="startLive" class="btn-primary" type="button"><svg class="ic"><use href="#i-camera"/></svg> <span id="startLiveLabel">Начать эфир</span></button>
-      <div class="sheet-row"><button id="startDemo" class="btn-ghost" type="button">Демо без камеры</button><button id="startFile" class="btn-ghost" type="button"><svg class="ic"><use href="#i-film"/></svg> Открыть видео</button></div>
-    </div>
+  <section class="screen screen-live" data-screen="live" aria-label="Выбор навыка для эфира">
+    <header class="topbar"><div class="topbar-title"><div><strong>Эфир</strong><small>Выбери навык — тренер проведёт по шагам</small></div></div></header>
+    <div id="liveSkillGrid" class="catalog"></div>
   </section>
 
   <section class="screen screen-progress" data-screen="progress" aria-label="Прогресс">
@@ -126,7 +120,6 @@
     <div class="profile-card">
       <span id="profileAvatar" class="avatar big"></span>
       <div class="profile-name"><input id="profileNameInput" maxlength="24" aria-label="Имя"><small id="profileSince"></small></div>
-      <div class="avatar-pick" id="profileAvatars" role="radiogroup" aria-label="Цвет аватара"></div>
     </div>
 
     <h3 class="section-title">Тренер</h3>
@@ -137,6 +130,8 @@
       </div>
       <label class="row"><span><strong>Голос тренера</strong><small>Озвучивать подсказки</small></span><input id="voiceInput" type="checkbox" class="switch"></label>
       <label class="row voice-choice"><span><strong>Голос</strong><small id="voiceHint">Голоса браузера и скачиваемые</small></span><select id="coachVoiceSelect" aria-label="Голос тренера"></select></label>
+      <label class="row stacked voice-setting"><span><strong>Громкость речи</strong> <output id="voiceVolumeValue" for="voiceVolumeInput">100%</output></span><input id="voiceVolumeInput" type="range" min="0" max="100" step="5" value="100"></label>
+      <label class="row stacked voice-setting"><span><strong>Скорость речи</strong> <output id="voiceRateValue" for="voiceRateInput">0,7×</output></span><input id="voiceRateInput" type="range" min="0.5" max="1.5" step="0.05" value="0.7"></label>
       <div class="voice-actions">
         <button id="previewCoachVoice" class="btn-ghost small" type="button">Прослушать</button>
         <button id="downloadCoachVoice" class="btn-ghost small model-download" type="button" hidden>Скачать голос · 63 МБ</button>
@@ -180,7 +175,7 @@
   <nav class="tabbar" aria-label="Разделы">
     <button class="tab" data-tab="chat" aria-label="Чат" aria-current="page"><svg class="ic"><use href="#i-chat"/></svg><span class="tab-label">Чат</span></button>
     <button class="tab" data-tab="catalog" aria-label="Навыки"><svg class="ic"><use href="#i-grid"/></svg><span class="tab-label">Навыки</span></button>
-    <button class="tab" data-tab="start" aria-label="Эфир"><svg class="ic"><use href="#i-camera"/></svg><span class="tab-label">Эфир</span></button>
+    <button class="tab" data-tab="live" aria-label="Эфир: выбрать навык"><svg class="ic"><use href="#i-camera"/></svg><span class="tab-label">Эфир</span></button>
     <button class="tab" data-tab="progress" aria-label="Прогресс"><svg class="ic"><use href="#i-chart"/></svg><span class="tab-label">Прогресс</span></button>
     <button class="tab tab-profile" data-tab="profile" aria-label="Профиль"><span id="tabAvatar" class="avatar tiny"></span><span class="tab-label">Профиль</span></button>
   </nav>

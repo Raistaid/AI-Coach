@@ -43,9 +43,12 @@ export const bus = {
 
 /* Bottom sheets: one open at a time, backdrop and Escape close them. */
 let openSheetId = null;
+let sheetDrag = null;
 export function openSheet(id) {
   closeSheet();
   const sheet = $(id); if (!sheet) return;
+  sheet.style.transform = '';
+  sheet.classList.remove('is-dragging');
   openSheetId = id; sheet.hidden = false; document.querySelector('[data-sheet-backdrop]').hidden = false;
   requestAnimationFrame(() => sheet.classList.add('is-open'));
   sheet.querySelector('button, input, [tabindex]')?.focus({ preventScroll: true });
@@ -53,10 +56,49 @@ export function openSheet(id) {
 export function closeSheet() {
   if (!openSheetId) return;
   const sheet = $(openSheetId); openSheetId = null;
-  sheet.classList.remove('is-open'); sheet.hidden = true;
-  document.querySelector('[data-sheet-backdrop]').hidden = true;
+  sheet.classList.remove('is-open', 'is-dragging'); sheet.style.transform = ''; sheet.hidden = true;
+  const backdrop = document.querySelector('[data-sheet-backdrop]');
+  backdrop.style.opacity = ''; backdrop.hidden = true;
 }
 export const currentSheet = () => openSheetId;
+
+// A bottom sheet follows a downward finger swipe and closes once the gesture is
+// long or fast enough. When its content is scrolled, the gesture first scrolls
+// normally and only starts dismissing after the sheet reaches the top.
+document.querySelectorAll('.sheet').forEach(sheet => {
+  sheet.addEventListener('touchstart', event => {
+    if (event.touches.length !== 1 || sheet.id !== openSheetId) { sheetDrag = null; return; }
+    const touch = event.touches[0]; const now = performance.now();
+    sheetDrag = { sheet, y: touch.clientY, x: touch.clientX, lastY: touch.clientY, lastT: now, distance: 0, velocity: 0, active: false };
+  }, { passive: true });
+  sheet.addEventListener('touchmove', event => {
+    if (!sheetDrag || sheetDrag.sheet !== sheet || event.touches.length !== 1) return;
+    const touch = event.touches[0]; const dy = touch.clientY - sheetDrag.y; const dx = touch.clientX - sheetDrag.x;
+    if (!sheetDrag.active) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      if (dy <= 0 || Math.abs(dy) <= Math.abs(dx) || sheet.scrollTop > 0) { sheetDrag = null; return; }
+      sheetDrag.active = true; sheet.classList.add('is-dragging');
+    }
+    event.preventDefault();
+    const now = performance.now();
+    sheetDrag.velocity = (touch.clientY - sheetDrag.lastY) / Math.max(1, now - sheetDrag.lastT);
+    sheetDrag.lastY = touch.clientY; sheetDrag.lastT = now; sheetDrag.distance = Math.max(0, dy);
+    sheet.style.transform = `translate(-50%, ${sheetDrag.distance}px)`;
+    const backdrop = document.querySelector('[data-sheet-backdrop]');
+    backdrop.style.opacity = String(Math.max(0, 1 - sheetDrag.distance / Math.max(240, sheet.offsetHeight)));
+  }, { passive: false });
+});
+
+function finishSheetDrag() {
+  const drag = sheetDrag; sheetDrag = null;
+  if (!drag?.active) return;
+  const dismiss = drag.distance > Math.min(160, drag.sheet.offsetHeight * 0.25) || drag.velocity > 0.65;
+  drag.sheet.classList.remove('is-dragging'); drag.sheet.style.transform = '';
+  document.querySelector('[data-sheet-backdrop]').style.opacity = '';
+  if (dismiss) { haptic(8); closeSheet(); }
+}
+document.addEventListener('touchend', finishSheetDrag, { passive: true });
+document.addEventListener('touchcancel', finishSheetDrag, { passive: true });
 
 export function avatarNode(profile, className = 'avatar') {
   const node = el('span', className, profile ? initialsOf(profile.name) : '?');

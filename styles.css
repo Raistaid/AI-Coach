@@ -318,10 +318,14 @@ select { padding: 9px 12px; border: 0; border-radius: 12px; background: var(--su
 .llm-box .muted-note { padding: 0; }
 
 /* ───────── Bottom sheets ───────── */
+.voice-setting > span { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
+.voice-setting output { color: var(--blue-text); font-variant-numeric: tabular-nums; }
+.voice-setting input[type="range"] { width: 100%; min-height: 32px; margin: 4px 0 0; accent-color: var(--blue); }
 .sheet-backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .45); animation: fade-in .2s ease; }
-.sheet { position: fixed; left: 50%; bottom: 0; z-index: 41; width: 100%; max-width: 480px; max-height: 88dvh; overflow: auto; padding: 8px 18px calc(20px + var(--safe-b)); border-radius: 30px 30px 0 0; background: var(--bg); color: var(--text); box-shadow: 0 -12px 40px rgba(0, 0, 0, .2); transform: translate(-50%, 100%); transition: transform .3s cubic-bezier(.2, .8, .2, 1); }
+.sheet { position: fixed; left: 50%; bottom: 0; z-index: 41; width: 100%; max-width: 480px; max-height: 88dvh; overflow: auto; overscroll-behavior-y: contain; padding: 8px 18px calc(20px + var(--safe-b)); border-radius: 30px 30px 0 0; background: var(--bg); color: var(--text); box-shadow: 0 -12px 40px rgba(0, 0, 0, .2); transform: translate(-50%, 100%); transition: transform .3s cubic-bezier(.2, .8, .2, 1); }
 .sheet.is-open { transform: translate(-50%, 0); }
-.sheet-grab { width: 44px; height: 5px; margin: 4px auto 16px; border-radius: 3px; background: var(--line); }
+.sheet.is-dragging { transition: none; }
+.sheet-grab { width: 44px; height: 5px; margin: 4px auto 16px; border-radius: 3px; background: var(--line); touch-action: none; }
 .sheet-head { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
 .sheet-head h2 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -.3px; }
 .sheet-head small { color: var(--muted); font-size: 13px; }
@@ -469,3 +473,9 @@ select { padding: 9px 12px; border: 0; border-radius: 12px; background: var(--su
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* Live entry is a regular tab with the same catalog of teachable skills. */
+.app[data-screen="live"] .screen-live { display: flex; }
+.live-menu { animation: none; max-height: calc(100% - 90px - var(--safe-t)); overflow-y: auto; }
+.menu-item { touch-action: manipulation; position: relative; }
+.menu-item > * { pointer-events: none; }

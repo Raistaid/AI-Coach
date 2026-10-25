@@ -53,7 +53,7 @@ function showScreen(name) {
   if (name === 'progress') renderProgress();
   if (name === 'profile') { renderProfile(); modelManager.refresh(); trainerAudio.refresh(); }
   if (name === 'catalog') renderCatalog();
-  if (name === 'start') renderStart();
+  if (name === 'live') renderCatalog('liveSkillGrid');
   if (name === 'chat') warmLiveCoach();
   if (name !== 'chat') document.querySelector(`.screen-${name}`)?.scrollTo({ top: 0 });
   if (drawerOpen) setDrawer(false, { focus: false });
@@ -61,23 +61,13 @@ function showScreen(name) {
 document.querySelectorAll('.tab[data-tab]').forEach(tab => tab.addEventListener('click', () => {
   haptic(6);
   // «Эфир»: the camera comes on at once; the plate on top lets the person pick the skill.
-  if (tab.dataset.tab === 'start') { startSession({ skillId: prefs.skill, mode: 'camera', pick: true }); return; }
+  if (tab.dataset.tab === 'live') { startSession({ skillId: prefs.skill, mode: 'camera', pick: true }); return; }
   if (tab.dataset.tab === app.dataset.screen) { document.querySelector(`.screen-${app.dataset.screen === 'chat' ? 'chat .chat-list' : app.dataset.screen}`)?.scrollTo({ top: app.dataset.screen === 'chat' ? 1e9 : 0, behavior: 'smooth' }); return; }
   showScreen(tab.dataset.tab);
 }));
 
 /* ───────────── Login ───────────── */
-function renderAvatarPicker(container, selectedHue, onPick) {
-  container.replaceChildren();
-  for (const hue of store.AVATAR_HUES) {
-    const swatch = el('button', 'swatch'); swatch.type = 'button'; swatch.style.setProperty('--hue', hue);
-    swatch.setAttribute('role', 'radio'); swatch.setAttribute('aria-checked', String(hue === selectedHue)); swatch.setAttribute('aria-label', `Оттенок ${hue}`);
-    swatch.addEventListener('click', () => { onPick(hue); renderAvatarPicker(container, hue, onPick); });
-    container.append(swatch);
-  }
-}
-let loginHue = store.AVATAR_HUES[0];
-renderAvatarPicker($('loginAvatars'), loginHue, hue => { loginHue = hue; });
+const loginHue = store.AVATAR_HUES[0];
 function submitLogin(event) {
   event?.preventDefault();
   const name = $('loginName').value.trim();
@@ -159,8 +149,8 @@ document.addEventListener('keydown', (event) => { if (event.key === '[' && profi
 
 /* ───────────── Catalog & skill sheet ───────────── */
 // Catalog: one section per category, a plain tile per skill (emoji, name, length).
-function renderCatalog() {
-  const root = $('catalogGrid'); root.replaceChildren();
+function renderCatalog(containerId = 'catalogGrid') {
+  const root = $(containerId); root.replaceChildren();
   const done = new Set(history.map(s => s.skill));
   for (const category of CATEGORIES) {
     const skills = SKILL_LIST.filter(skill => skill.category === category.id);
@@ -197,30 +187,6 @@ $('skillFile').addEventListener('click', () => { live.unlockSpeech(); live.ensur
 $('videoFile').addEventListener('change', (event) => { const file = event.target.files[0]; event.target.value = ''; if (!file) return; closeSheet(); chat.introduceSkill(sheetSkillId); startSession({ skillId: sheetSkillId, mode: 'file', file }); });
 document.querySelector('[data-sheet-backdrop]').addEventListener('click', closeSheet);
 
-/* ───────────── Start screen: pick a skill from the list, then train it ───────────── */
-function renderStart() {
-  const list = $('startList'); list.replaceChildren();
-  const current = getSkill(prefs.skill);
-  for (const category of CATEGORIES) {
-    const skills = SKILL_LIST.filter(skill => skill.category === category.id);
-    if (!skills.length) continue;
-    list.append(el('div', 'start-group', category.name));
-    for (const skill of skills) {
-      const row = el('button', 'start-row'); row.type = 'button'; row.setAttribute('role', 'radio'); row.setAttribute('aria-checked', String(skill.id === current.id));
-      const copy = el('div'); copy.append(el('b', null, skill.name), el('small', null, `${skill.level} · ${steps(skill.lessons.length)} · ${skill.minutes} мин${skill.needsBall ? ' · нужен мяч' : ''}`));
-      const check = el('span', 'check'); check.append(icon('i-check'));
-      row.append(el('span', 'skill-emoji', skill.emoji), copy, check);
-      row.addEventListener('click', () => { prefs.skill = skill.id; store.savePrefs(prefs); bus.emit('prefs-changed'); renderStart(); haptic(6); });
-      list.append(row);
-    }
-  }
-  text('startCamera', current.camera);
-  text('startLiveLabel', `Начать эфир: ${current.name}`);
-}
-$('startLive').addEventListener('click', () => { chat.introduceSkill(prefs.skill); startSession({ skillId: prefs.skill, mode: 'camera' }); });
-$('startDemo').addEventListener('click', () => { chat.introduceSkill(prefs.skill); startSession({ skillId: prefs.skill, mode: 'demo' }); });
-$('startFile').addEventListener('click', () => { sheetSkillId = prefs.skill; live.unlockSpeech(); live.ensureAudio(); $('videoFile').click(); });
-
 /* ───────────── Progress ───────────── */
 function renderProgress() {
   const stats = store.historyStats(history);
@@ -248,7 +214,6 @@ $('clearHistory').addEventListener('click', () => { history = []; store.saveHist
 function renderProfile() {
   paintAvatar($('profileAvatar'), profile); $('profileNameInput').value = profile.name;
   text('profileSince', `В Aimo с ${new Date(profile.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}`);
-  renderAvatarPicker($('profileAvatars'), profile.hue, hue => { profile = { ...profile, hue }; store.saveProfile(profile); syncProfile(); });
   renderPersonalities(); applyPreferences();
 }
 function syncProfile() { paintAvatar($('tabAvatar'), profile); paintAvatar($('profileAvatar'), profile); chat.setProfile(profile); live.setProfile(profile); }
@@ -281,7 +246,7 @@ document.querySelectorAll('input[name=llmModel]').forEach(radio => radio.addEven
   prefs.llmModel = radio.value; store.savePrefs(prefs);
   await unloadLiveCoach(); if (prefs.liveCoach) ensureLiveCoach().catch(() => {});
 }));
-bus.on('prefs-changed', () => { applyPreferences(); if (app.dataset.screen === 'profile') renderPersonalities(); chat.renderHeader(); });
+bus.on('prefs-changed', () => { applyPreferences(); if (app.dataset.screen === 'profile') renderPersonalities();  chat.renderHeader(); });
 
 /* ───────────── Local LLM ───────────── */
 function renderModels() {
@@ -354,7 +319,7 @@ function renderVoiceOptions() {
   for (const voice of voices) { const option = el('option', null, `${voice.name}${voice.localService ? '' : ' · онлайн'}`); option.value = voiceKey(voice); system.append(option); }
   if (voices.length) select.append(system);
   select.value = localVoice(prefs.voiceId) || voices.some(v => voiceKey(v) === prefs.voiceId) ? prefs.voiceId : '';
-  text('voiceHint', 'Денис и Дмитрий звучат на устройстве после скачивания');
+  text('voiceHint', 'Ирина, Руслан, Денис и Дмитрий · скачай и прослушай, чтобы выбрать');
   renderLocalVoiceControls();
 }
 function renderLocalVoiceControls() {
@@ -372,6 +337,19 @@ function renderLocalVoiceControls() {
   text('voiceDownloadStatus', voice && !trainerAudio.supported ? 'Для скачиваемых голосов нужен браузер с локальным хранилищем и Web Audio. Выбери системный голос.' : message || (ready ? 'Голос скачан. Нажми «Прослушать голос», чтобы выбрать звучание.' : voice ? 'Один раз скачай голос. При первом запуске также загрузится модуль озвучивания.' : 'Выбранный голос озвучивает подсказки и ответы в эфире.'));
 }
 trainerAudio.onChange(() => { renderLocalVoiceControls(); renderModels(); });
+function renderSpeechSettings() {
+  $('voiceVolumeInput').value = Math.round(prefs.voiceVolume * 100);
+  $('voiceRateInput').value = prefs.voiceRate;
+  text('voiceVolumeValue', `${Math.round(prefs.voiceVolume * 100)}%`);
+  text('voiceRateValue', `${prefs.voiceRate.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}×`);
+}
+for (const [id, key, scale] of [['voiceVolumeInput', 'voiceVolume', 100], ['voiceRateInput', 'voiceRate', 1]]) {
+  $(id).addEventListener('input', () => {
+    prefs[key] = Number($(id).value) / scale;
+    store.savePrefs(prefs); renderSpeechSettings();
+  });
+}
+renderSpeechSettings();
 $('coachVoiceSelect').addEventListener('change', () => { trainerAudio.release(); prefs.voiceId = $('coachVoiceSelect').value; store.savePrefs(prefs); renderLocalVoiceControls(); trainerAudio.refresh(); });
 $('downloadCoachVoice').addEventListener('click', async () => {
   if (modelManager.busy || live.isActive()) return;

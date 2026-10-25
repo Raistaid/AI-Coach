@@ -6,14 +6,14 @@
 // URLs carry the version and never change. WebLLM keeps its own model caches and Piper
 // voices live in OPFS; neither is touched here. The Piper runtime comes from esm.sh with
 // unversioned polyfills, so it is not cached: offline the browser voice reads the phrases.
-const CACHE = 'aimo-v4';
+const CACHE = 'aimo-v8';
 const SHELL = [
   './', './index.html', './styles.css', './app-icon-32.png', './app-icon-180.png', './app-icon-192.png', './app-icon-512.png', './manifest.webmanifest',
-  './app/main.js', './app/chat.js', './app/live.js', './app/store.js', './app/ui.js', './app/viewport.js',
+  './app/camera.js', './app/main.js', './app/chat.js', './app/live.js', './app/store.js', './app/ui.js', './app/viewport.js',
   './app/model-manager.js', './app/speech.js', './app/trainer-audio.js', './app/tts-worker.js',
   './app/voice-cache.js', './app/voice-models.js', './app/voice-queue.js',
   './coach-engine.js', './coach-motion.js', './coach-policy.js', './coach-llm.js', './coach-planner.js', './coach-talk.js',
-  './coach-progress.js', './coach-objects.js', './coach-questions.js', './rhythm.js', './llm-worker.js',
+  './coach-progress.js', './coach-objects.js', './coach-questions.js', './coach-chat.js', './rhythm.js', './llm-worker.js',
   './skills/index.js', './skills/common.js', './skills/puppet.js', './skills/football.js', './skills/balance.js', './skills/squats.js',
   './skills/lunges.js', './skills/pushups.js', './skills/plank.js', './skills/jacks.js', './skills/highknees.js',
 ];

@@ -59,7 +59,7 @@ export function createTrainerAudio({ store = createVoiceStore(), makeWorker = ()
     const done = () => { if (run === serial) finish(); };
     utterance.onend = done; utterance.onerror = done;
     // Some browsers drop «end»: a generous estimate keeps the queue moving.
-    const watchdog = setTimeout(done, 2500 + text.length * 90 / (personality?.voiceRate || 1)); watchdog?.unref?.();
+    const watchdog = setTimeout(done, 2500 + text.length * 90 / (prefs.voiceRate ?? personality?.voiceRate ?? 1)); watchdog?.unref?.();
     service.speak(utterance); return true;
   };
   return {
@@ -105,7 +105,7 @@ export function createTrainerAudio({ store = createVoiceStore(), makeWorker = ()
         if (!await store.has(voice)) throw new Error('Сначала скачай выбранный голос. Пока используется голос браузера.');
         if (run !== serial) return false;
         playing = true; notify('Готовим озвучивание…');
-        const data = await generate(text, voice, personality.voiceRate, timeoutMs);
+        const data = await generate(text, voice, prefs.voiceRate ?? personality.voiceRate, timeoutMs);
         if (run !== serial) return false;
         if (!audioContext || audioContext.state !== 'running') throw new Error('Нажми «Прослушать голос», чтобы разрешить звук.');
         const pcm = new Float32Array(data.pcm);
@@ -113,6 +113,7 @@ export function createTrainerAudio({ store = createVoiceStore(), makeWorker = ()
         const buffer = audioContext.createBuffer(1, pcm.length, data.sampleRate); buffer.copyToChannel(pcm, 0);
         source = audioContext.createBufferSource(); source.buffer = buffer;
         gain = typeof audioContext.createGain === 'function' ? audioContext.createGain() : null;
+        if (gain) gain.gain.value = prefs.voiceVolume ?? 1;
         if (gain) { source.connect(gain); gain.connect(audioContext.destination); } else source.connect(audioContext.destination);
         source.onended = () => { if (run === serial) { playing = false; source?.disconnect(); gain?.disconnect?.(); source = null; gain = null; notify('Озвучивание завершено.'); finish(); } };
         source.start(); notify(`Говорит ${voice.name}`); return true;

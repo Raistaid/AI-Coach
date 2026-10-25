@@ -21,6 +21,14 @@ test('selected downloaded speaker produces PCM playback with the real selected I
   assert.equal(h.sources[0].started, true); assert.equal(h.sources[0].buffer.rate, 22050); assert.equal(h.spoken.length, 0);
   h.sources[0].onended(); assert.equal(h.audio.speaking, false); await h.audio.dispose();
 });
+test('downloaded speech uses saved speed and gain including mute', async () => {
+  const h = harness(); const node = { gain: { value: 1 }, connect() {}, disconnect() {} };
+  h.context.createGain = () => node;
+  const result = h.audio.speak('Привет', { voiceId: voice.id, voiceRate: .65, voiceVolume: 0 }, personality);
+  await tick(); assert.equal(h.workers[0].sent.rate, .65);
+  h.reply(); assert.equal(await result, true); assert.equal(node.gain.value, 0);
+  await h.audio.dispose();
+});
 test('cancel terminates pending inference and ignores its late audio, without speaking fallback', async () => {
   const h = harness(); const result = h.audio.speak('Стоп', { voiceId: voice.id }, personality); await tick();
   h.audio.cancel(); h.reply(); assert.equal(await result, false); assert.equal(h.workers[0].terminated, true);

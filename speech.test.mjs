@@ -14,6 +14,10 @@ test('voice choice selects the saved Russian voice and falls back when it disapp
   const utterance = configureUtterance({}, { voiceId: 'ru2' }, { voiceRate: 1.1, voicePitch: .9 }, voices);
   assert.equal(utterance.voice.voiceURI, 'ru2'); assert.equal(utterance.lang, 'ru-RU'); assert.equal(utterance.rate, 1.1);
 });
+test('saved speech speed and mute volume apply to browser speech', () => {
+  const utterance = configureUtterance({}, { voiceRate: 1.4, voiceVolume: 0 }, { voiceRate: .9, voicePitch: 1 }, voices);
+  assert.equal(utterance.rate, 1.4); assert.equal(utterance.volume, 0);
+});
 test('microphone starts only on explicit start, handles one final result and releases recognition', () => {
   const f = fixture(); assert.equal(f.instances.length, 0);
   f.input.start(); const r = f.instances[0]; assert.equal(r.lang, 'ru-RU'); assert.equal(r.continuous, false);

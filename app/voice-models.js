@@ -2,6 +2,8 @@
 // These are distinct trained voices, not pitch presets of a system voice.
 export const VOICE_REVISION = '5041a7a49ae5b3a0f30e6837769eb03fdbb231bd';
 export const LOCAL_VOICES = [
+  { id: 'piper:ru_RU-irina-medium', modelId: 'ru_RU-irina-medium', name: 'Ирина', description: 'Женский голос', speaker: 'irina', modelBytes: 63201294, configBytes: 4765 },
+  { id: 'piper:ru_RU-ruslan-medium', modelId: 'ru_RU-ruslan-medium', name: 'Руслан', description: 'Мужской голос', speaker: 'ruslan', modelBytes: 63201294, configBytes: 4882 },
   { id: 'piper:ru_RU-denis-medium', modelId: 'ru_RU-denis-medium', name: 'Денис', description: 'Ровный мужской голос', speaker: 'denis', modelBytes: 63201294, configBytes: 4823 },
   { id: 'piper:ru_RU-dmitri-medium', modelId: 'ru_RU-dmitri-medium', name: 'Дмитрий', description: 'Мягкий мужской голос', speaker: 'dmitri', modelBytes: 63201294, configBytes: 4824 },
 ];
