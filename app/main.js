@@ -53,12 +53,12 @@ function showScreen(name) {
   if (name === 'progress') renderProgress();
   if (name === 'profile') { renderProfile(); modelManager.refresh(); trainerAudio.refresh(); }
   if (name === 'catalog') renderCatalog();
+  if (name === 'live') renderCatalog('liveSkillGrid');
   if (name !== 'chat') document.querySelector(`.screen-${name}`)?.scrollTo({ top: 0 });
   if (drawerOpen) setDrawer(false, { focus: false });
 }
 document.querySelectorAll('.tab[data-tab]').forEach(tab => tab.addEventListener('click', () => {
   haptic(6);
-  if (tab.dataset.tab === 'live') { openSkillSheet(prefs.skill); return; }
   if (tab.dataset.tab === app.dataset.screen) { document.querySelector(`.screen-${app.dataset.screen === 'chat' ? 'chat .chat-list' : app.dataset.screen}`)?.scrollTo({ top: app.dataset.screen === 'chat' ? 1e9 : 0, behavior: 'smooth' }); return; }
   showScreen(tab.dataset.tab);
 }));
@@ -146,8 +146,8 @@ document.addEventListener('keydown', (event) => { if (event.key === '[' && profi
 
 /* ───────────── Catalog & skill sheet ───────────── */
 // Catalog: one section per category, a plain tile per skill (emoji, name, length).
-function renderCatalog() {
-  const root = $('catalogGrid'); root.replaceChildren();
+function renderCatalog(containerId = 'catalogGrid') {
+  const root = $(containerId); root.replaceChildren();
   const done = new Set(history.map(s => s.skill));
   for (const category of CATEGORIES) {
     const skills = SKILL_LIST.filter(skill => skill.category === category.id);

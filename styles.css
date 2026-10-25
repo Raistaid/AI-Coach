@@ -559,3 +559,9 @@ select { padding: 9px 12px; border: 0; border-radius: 12px; background: var(--su
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* Live entry is a regular tab with the same catalog of teachable skills. */
+.app[data-screen="live"] .screen-live { display: flex; }
+.live-menu { animation: none; max-height: calc(100% - 90px - var(--safe-t)); overflow-y: auto; }
+.menu-item { touch-action: manipulation; position: relative; }
+.menu-item > * { pointer-events: none; }

@@ -10,6 +10,7 @@ import { nextInPlan, pluralize } from '../coach-planner.js';
 import { $, text, el, toast, haptic, bus, formatTime, openSheet, closeSheet, rhythmNode } from './ui.js';
 import { rhythmStats, rhythmText } from '../rhythm.js';
 import * as store from './store.js';
+import { openCameraStream } from './camera.js';
 import { createVoiceQuestion } from './speech.js';
 import { trainerAudio } from './trainer-audio.js';
 import { createVoiceQueue, VOICE_PRIORITY } from './voice-queue.js';
@@ -37,7 +38,6 @@ let frames = { good: 0, total: 0 }; let demo = null; let lastLiveAt = 0; let las
 let farState = { far: false, frames: 0 }; let farManual = null; let audioCtx = null; let pendingFile = null;
 let lastSummaryText = ''; let fadeTimer = 0; let guideSince = null; let muted = false; let switching = false;
 // Camera view: the whole frame by default, the widest lens the phone offers.
-const ULTRA_WIDE = /ultra ?wide|сверхширок/i;
 let lens = { ultraId: null, active: false };
 // Rhythm: the moments the engine counted repetitions, touches or lifts.
 let tally = { key: null, count: 0, times: [], words: null };
@@ -69,6 +69,7 @@ export function initLive({ prefs, profile, ensureLiveCoach, getLiveCoach, onHist
     ctx.prefs.fit = ctx.prefs.fit === 'cover' ? 'contain' : 'cover'; store.savePrefs(ctx.prefs); applyPrefs(); haptic(6);
   });
   $('liveLens').addEventListener('click', () => {
+    if (switching || facingMode !== 'environment' || !lens.ultraId || !['live', 'paused'].includes(state)) return;
     setMenu(false); ctx.prefs.wide = !lens.active; store.savePrefs(ctx.prefs);
     restartCamera(() => (lens.active ? 'Широкий угол 0.5×' : 'Обычный угол 1×'));
   });
@@ -270,45 +271,10 @@ async function ensureEngine(run) {
 
 /* ───────────── Camera ───────────── */
 
-const cameraConstraints = (extra) => ({ audio: false, video: { width: { ideal: 720 }, height: { ideal: 1280 }, ...extra } });
-/** getUserMedia with a plain fallback: some cameras refuse the preferred size or lens. */
-async function requestCamera(extra) {
-  try { return await navigator.mediaDevices.getUserMedia(cameraConstraints(extra)); }
-  catch (error) {
-    if (error?.name === 'OverconstrainedError' || error?.name === 'NotReadableError') {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      return navigator.mediaDevices.getUserMedia({ audio: false, video: extra.deviceId ? { deviceId: extra.deviceId } : { facingMode: extra.facingMode } });
-    }
-    throw error;
-  }
-}
-/** Opens the camera; on the rear side prefers the ultra-wide lens when the phone has one. */
 async function openCamera() {
-  let media = await requestCamera({ facingMode: { ideal: facingMode } });
-  lens = { ultraId: null, active: false };
-  if (facingMode === 'environment') {
-    try {
-      const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
-      const ultra = cams.find(d => ULTRA_WIDE.test(d.label));
-      if (ultra) {
-        lens.ultraId = ultra.deviceId;
-        if (media.getVideoTracks()[0]?.getSettings?.().deviceId === ultra.deviceId) lens.active = true;
-        else if (ctx.prefs.wide) {
-          media.getTracks().forEach(t => t.stop()); // iOS mutes the first stream when a second camera opens
-          const wide = await requestCamera({ deviceId: { exact: ultra.deviceId } }).catch(() => null);
-          media = wide || await requestCamera({ facingMode: { ideal: facingMode } });
-          lens.active = Boolean(wide);
-        }
-      }
-    } catch { /* the lens choice is optional */ }
-  }
-  // Cameras with optical or digital zoom start at their widest setting.
-  const track = media.getVideoTracks()[0];
-  try {
-    const caps = track?.getCapabilities?.();
-    if (caps?.zoom && Number.isFinite(caps.zoom.min) && (track.getSettings().zoom ?? caps.zoom.min) > caps.zoom.min) await track.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] });
-  } catch { /* zoom is not supported */ }
-  return media;
+  const opened = await openCameraStream(navigator.mediaDevices, { facing: facingMode, wide: ctx.prefs.wide });
+  lens = opened.lens;
+  return opened.media;
 }
 /** Watches the camera: the system may pause it (a call, the lock screen) or take it away. */
 function attachStream(media) {
@@ -325,7 +291,9 @@ function attachStream(media) {
 const trackAlive = () => stream?.getVideoTracks().some(t => t.readyState === 'live');
 function renderLens() {
   const button = $('liveLens');
-  button.hidden = !lens.ultraId || source !== 'camera';
+  // Keep menu rows stable on touch devices, including the front camera.
+  button.hidden = false;
+  button.disabled = !lens.ultraId || facingMode !== 'environment' || source !== 'camera' || mode === 'demo';
   button.setAttribute('aria-checked', String(lens.active));
 }
 async function restartCamera(message, onFail) {
