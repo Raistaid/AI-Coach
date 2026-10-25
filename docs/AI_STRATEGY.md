@@ -206,3 +206,11 @@ docs/TEST_PLAN.md как «Не проверено».
   `runningMode: 'VIDEO'`, который используется в `coach-engine.js`.
 - Правило для агентов зафиксировано в AGENTS.md: API сверять через `query-docs`
   до использования и записывать выдержку с датой сюда.
+- Проверка в новой сессии (25 октября): из папки проекта запущена отдельная
+  неинтерактивная сессия Claude Code (`claude -p`, модель Sonnet) с просьбой
+  воспользоваться Context7. Сервер подхвачен из `.mcp.json`, разрешения из
+  `.claude/settings.json`: вызовы `resolve-library-id` («web-llm» →
+  `/mlc-ai/web-llm`) и `query-docs` («MLCEngine unload» → «Unloads all loaded
+  models and clears their associated configurations») прошли без запросов
+  подтверждения, 3 хода, ошибок нет. Конфигурация работает у любого участника
+  после `git pull`.
