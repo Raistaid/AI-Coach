@@ -254,7 +254,7 @@ document.querySelectorAll('input[name=llmModel]').forEach(radio => radio.addEven
   prefs.llmModel = radio.value; store.savePrefs(prefs);
   await unloadLiveCoach(); if (prefs.liveCoach) ensureLiveCoach().catch(() => {});
 }));
-bus.on('prefs-changed', () => { applyPreferences(); if (app.dataset.screen === 'profile') renderPersonalities(); chat.renderHeader(); });
+bus.on('prefs-changed', () => { applyPreferences(); if (app.dataset.screen === 'profile') renderPersonalities(); });
 
 /* ───────────── Local LLM ───────────── */
 function renderModels() {

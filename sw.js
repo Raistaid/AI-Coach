@@ -6,7 +6,7 @@
 // URLs carry the version and never change. WebLLM keeps its own model caches and Piper
 // voices live in OPFS; neither is touched here. The Piper runtime comes from esm.sh with
 // unversioned polyfills, so it is not cached: offline the browser voice reads the phrases.
-const CACHE = 'aimo-v4';
+const CACHE = 'aimo-v5';
 const SHELL = [
   './', './index.html', './styles.css', './app-icon-32.png', './app-icon-180.png', './app-icon-192.png', './app-icon-512.png', './manifest.webmanifest',
   './app/main.js', './app/chat.js', './app/live.js', './app/store.js', './app/ui.js', './app/viewport.js',

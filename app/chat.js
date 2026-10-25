@@ -1,7 +1,7 @@
 // Chat screen: a thread with the coach, like a direct-message conversation.
 // The coach answers from the skill planner (keywords or the local LLM); every
 // message is stored on the device. Live sessions post their summary here.
-import { SKILL_LIST, getSkill, PERSONALITIES } from '../skills/index.js';
+import { SKILL_LIST, getSkill } from '../skills/index.js';
 import { keywordPlan, buildPlannerMessages, parsePlan, planReplyText, pluralize } from '../coach-planner.js';
 import { $, text, el, icon, toast, haptic, bus, timeLabel, relativeDate, formatTime, rhythmNode } from './ui.js';
 import * as store from './store.js';
@@ -88,7 +88,6 @@ function renderThread() {
     if (day !== lastDay) { list.append(el('div', 'day-sep', day)); lastDay = day; }
     list.append(messageNode(message));
   }
-  renderHeader();
   stick = true; setJump(false); renderChips(); scrollBottom();
 }
 function appendNode(message) {
@@ -191,11 +190,6 @@ function renderChips() {
     chip.addEventListener('click', () => send(label));
     chips.append(chip);
   }
-}
-
-/** The header names the coach's character; it follows the profile setting. */
-export function renderHeader() {
-  text('chatSub', `${PERSONALITIES[ctx.prefs.personality].name} тренер · ИИ на устройстве`);
 }
 
 export function renderDrawer() {
