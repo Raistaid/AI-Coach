@@ -1,7 +1,7 @@
 /* Aimo — Facebook colours: one brand blue on a soft grey canvas, white rounded cards
    with soft shadows, pill-shaped controls, a full-screen vertical live stage.
    Light and dark themes. Layout notes: the shell follows the visible viewport
-   (app/viewport.js), every screen scrolls inside itself, the tab bar sits in the flow. */
+   (app/viewport.js), every screen scrolls inside itself, only the tab bar floats above the scrolling screens. */
 :root {
   color-scheme: light;
   --skill-border: #aab5c5; --nav-bg: #fff; --nav-active: #e9eaec; --outer: #fff; --bg2: #fff; --bg: #ffffff; --surface2: #f0f2f5; --hover: #e4e6eb;
@@ -13,7 +13,7 @@
   --shadow-2: 0 12px 32px rgba(0, 0, 0, .14);
   --shadow-blue: 0 6px 16px rgba(8, 102, 255, .28);
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --tab-h: 62px; --safe-b: env(safe-area-inset-bottom, 0px); --safe-t: env(safe-area-inset-top, 0px);
+  --tab-h: 60px; --safe-b: env(safe-area-inset-bottom, 0px); --safe-t: env(safe-area-inset-top, 0px);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -40,7 +40,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 /* ───────── Shell ───────── */
 .app { position: fixed; top: var(--vvt, 0px); left: 0; right: 0; height: var(--vvh, 100dvh); max-width: 480px; margin: 0 auto; background: var(--bg2); display: flex; flex-direction: column; overflow: hidden; }
 @media (min-width: 481px) { body { background: var(--outer); } .app { box-shadow: 0 0 0 1px var(--line2), 0 20px 60px rgba(0, 0, 0, .12); } }
-.screen { display: none; flex: 1; flex-direction: column; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 18px; }
+.screen { display: none; flex: 1; flex-direction: column; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: calc(var(--tab-h) + var(--safe-b) + 24px); }
 .screen > * { flex-shrink: 0; }
 .screen-chat > .chat-wrap { flex-shrink: 1; }
 .screen-catalog, .screen-progress, .screen-profile { padding-top: var(--safe-t); }
@@ -104,7 +104,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .toolbar-accent { background: var(--brand); color: #fff; border-color: var(--blue); }
 .toolbar-history .ic, .toolbar-accent .ic { width: 22px; height: 22px; stroke-width: 2.2; }
 .app-toolbar ~ .screen .topbar { padding-top: calc(8px + var(--safe-t)); background: var(--bg2); box-shadow: none; }
-.tabbar { flex: none; display: flex; height: 60px; margin: 4px 10px calc(8px + var(--safe-b)); padding: 4px; border: 1px solid var(--line); border-radius: 999px; background: var(--nav-bg); box-shadow: 0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.05); }
+.tabbar { position: absolute; z-index: 20; left: 10px; right: 10px; bottom: calc(8px + var(--safe-b)); display: flex; height: var(--tab-h); margin: 0; padding: 4px; border: 1px solid var(--line); border-radius: 999px; background: var(--nav-bg); box-shadow: 0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.05); }
 .tab { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 2px 1px; background: none; border: 0; border-radius: 999px; color: var(--text); font-size: 10.5px; font-weight: 500; transition: background .2s; }
 .tab .ic { width: 24px; height: 24px; stroke-width: 1.7; }
 .tab[aria-current] { background: var(--nav-active); }
@@ -128,7 +128,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .setup-option small { color: var(--muted); font-size: 12px; margin-top: 4px; }
 #voiceSettings, #modelSettings { scroll-margin-top: 64px; }
 .setup-footnote { font-size: 12px; margin-top: 16px; color: var(--muted); }
-@media (max-width: 350px), (max-height: 620px) { .app-toolbar { --toolbar-size: 40px; padding-top: calc(4px + var(--safe-t)); padding-bottom: 4px; } .toolbar-coach { padding-block: 3px; } .toolbar-coach strong { font-size: 15px; } .toolbar-coach small { font-size: 9px; } .tabbar { height: 56px; margin-inline: 6px; } .tab { font-size: 10px; } .setup-reminder { padding: 8px 10px; margin-bottom: 4px; } }
+@media (max-width: 350px), (max-height: 620px) { :root { --tab-h: 56px; } .app-toolbar { --toolbar-size: 40px; padding-top: calc(4px + var(--safe-t)); padding-bottom: 4px; } .toolbar-coach { padding-block: 3px; } .toolbar-coach strong { font-size: 15px; } .toolbar-coach small { font-size: 9px; } .tabbar { left: 6px; right: 6px; } .tab { font-size: 10px; } .setup-reminder { padding: 8px 10px; margin-bottom: 4px; } }
 
 /* ───────── Login ───────── */
 .screen-login { align-items: center; padding: 24px; background: radial-gradient(900px 520px at 50% -12%, var(--blue-soft), transparent 70%), var(--bg2); }
@@ -222,7 +222,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .chips::-webkit-scrollbar { display: none; }
 .chip { flex: none; padding: 9px 15px; border: 1.5px solid var(--blue-soft); border-radius: 999px; background: var(--bg); color: var(--blue-text); font-size: 14px; font-weight: 600; white-space: nowrap; box-shadow: var(--shadow-1); transition: background .15s, transform .12s; }
 .chip:active { transform: scale(.96); background: var(--blue-soft); }
-.composer { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 12px 12px; }
+.composer { margin-bottom: calc(var(--tab-h) + var(--safe-b) + 12px); flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 12px 12px; }
+.app[data-keyboard="open"] .composer { margin-bottom: 0; }
 .composer input { flex: 1; min-width: 0; height: 48px; padding: 0 18px; border: 1.5px solid var(--line2); border-radius: 999px; background: var(--bg); color: var(--text); font-size: 16px; box-shadow: var(--shadow-1); transition: border-color .15s; }
 .composer input:focus { outline: 0; border-color: var(--blue); }
 .send-btn { width: 48px; height: 48px; border-radius: 50%; border: 0; display: grid; place-items: center; background: var(--brand); color: #fff; box-shadow: var(--shadow-blue); transition: transform .12s; }
@@ -288,10 +289,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .empty { margin: 0; padding: 18px 4px; color: var(--muted); font-size: 14px; text-align: center; line-height: 1.5; }
 
 /* ───────── Profile & settings ───────── */
-.profile-card { margin: 12px 14px 0; padding: 8px 6px; background: none; border: 0; box-shadow: none; display: flex; align-items: center; gap: 14px; }
+.profile-card { margin: 12px 14px 0; padding: 8px 6px; background: none; border: 0; box-shadow: none; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
 .profile-card .avatar.big { width: 60px; height: 60px; font-size: 23px; box-shadow: 0 0 0 3px var(--bg), 0 0 0 4px var(--blue); }
-.profile-name { min-width: 0; flex: 1; width: 100%; display: flex; flex-direction: column; gap: 2px; }
-.profile-name input { width: 100%; padding: 4px 0; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text); font-size: 20px; font-weight: 750; text-align: left; }
+.profile-name { min-width: 0; width: 100%; display: flex; flex-direction: column; gap: 2px; }
+.profile-name input { width: 100%; padding: 4px 0; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text); font-size: 20px; font-weight: 750; text-align: center; }
 .profile-name input:focus { outline: 0; border-bottom-color: var(--blue); }
 .profile-name small { font-size: 12px; color: var(--muted); }
 .section-title { margin: 22px 20px 8px; font-size: 14px; font-weight: 700; color: var(--muted); }
@@ -309,10 +310,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .segment { min-height: 38px; padding: 6px 8px; border: 0; border-radius: 10px; background: none; color: var(--muted); font-size: 14px; font-weight: 600; transition: background .15s, color .15s; }
 .segment[aria-checked="true"] { background: var(--bg); color: var(--text); box-shadow: var(--shadow-1); }
 .segmented-note { font-size: 12px; color: var(--muted); }
-#personalityRow { position: relative; isolation: isolate; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-flow: row; gap: 0; padding: 4px; border: 1px solid color-mix(in srgb, var(--text) 20%, transparent); border-radius: 999px; background: linear-gradient(135deg, color-mix(in srgb, var(--text) 9%, transparent), transparent 65%), color-mix(in srgb, var(--blue-soft) 24%, var(--bg) 76%); box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 4px 16px rgba(0,0,0,.08); backdrop-filter: blur(18px) saturate(1.5); -webkit-backdrop-filter: blur(18px) saturate(1.5); }
-#personalityRow::before { content: ""; position: absolute; z-index: 0; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px) / 3); border: 1px solid color-mix(in srgb, var(--text) 24%, transparent); border-radius: 999px; background: linear-gradient(145deg, rgba(255,255,255,.22), rgba(255,255,255,.04) 55%, rgba(255,255,255,.12)); box-shadow: inset 0 1px 0 rgba(255,255,255,.4), inset 0 -1px 0 rgba(255,255,255,.05), 0 3px 12px rgba(0,0,0,.16); transform: translateX(calc(var(--selected-index, 2) * 100%)); transition: transform .32s cubic-bezier(.2,.8,.2,1); pointer-events: none; }
-#personalityRow .segment { position: relative; z-index: 1; min-width: 0; padding-inline: 4px; border-radius: 999px; background: transparent; box-shadow: none; font-size: 13px; }
-#personalityRow .segment[aria-checked="true"] { color: var(--text); background: transparent; box-shadow: none; }
+#personalityRow { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-flow: row; gap: 0; padding: 4px; border: 1px solid var(--line); border-radius: 999px; background: var(--nav-bg); box-shadow: 0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.05); }
+#personalityRow .segment { min-width: 0; min-height: 40px; padding: 8px 4px; border-radius: 999px; background: transparent; box-shadow: none; color: var(--text); font-size: 13px; font-weight: 500; transition: background .2s; }
+#personalityRow .segment[aria-checked="true"] { color: var(--text); background: var(--nav-active); box-shadow: none; }
+.screen-profile #logoutBtn { margin-top: 8px; }
 #modelSettings { margin-top: 20px; }
 
 .details > summary { list-style: none; cursor: pointer; border-bottom: 0; }

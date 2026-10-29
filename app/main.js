@@ -227,7 +227,6 @@ $('profileNameInput').addEventListener('change', () => {
 });
 function renderPersonalities() {
   const row = $('personalityRow'); row.replaceChildren();
-  row.style.setProperty('--selected-index', Math.max(0, Object.values(PERSONALITIES).findIndex(p => p.id === prefs.personality)));
   for (const p of Object.values(PERSONALITIES)) {
     const chip = el('button', 'segment', p.name); chip.type = 'button'; chip.setAttribute('role', 'radio'); chip.setAttribute('aria-checked', String(p.id === prefs.personality));
     chip.addEventListener('click', () => { prefs.personality = p.id; store.savePrefs(prefs); renderPersonalities(); bus.emit('prefs-changed'); });
