@@ -211,10 +211,11 @@ function renderProgress() {
     row.append(copy); list.append(row);
   }
 }
-$('clearHistory').addEventListener('click', () => { history = []; store.saveHistory(history); renderProgress(); chat.setHistory(history); toast('История очищена'); });
+$('clearHistory').addEventListener('click', () => { history = []; store.saveHistory(history); renderProgress(); chat.setHistory(history); toast('Прогресс удалён'); });
 
 /* ───────────── Profile & settings ───────────── */
 function renderProfile() {
+  $('clearHistory').disabled = history.length === 0;
   paintAvatar($('profileAvatar'), profile); $('profileNameInput').value = profile.name;
   text('profileSince', `В Aimo с ${new Date(profile.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}`);
   renderPersonalities(); applyPreferences();

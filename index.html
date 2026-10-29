@@ -102,7 +102,6 @@
   </section>
 
   <section class="screen screen-catalog" data-screen="catalog" aria-label="Навыки">
-    <header class="topbar"><div class="topbar-title"><div><strong>Навыки</strong><small>Шаг засчитывается только по реальному движению</small></div></div></header>
     <div id="catalogGrid" class="catalog"></div>
   </section>
 
@@ -112,7 +111,6 @@
   </section>
 
   <section class="screen screen-progress" data-screen="progress" aria-label="Прогресс">
-    <header class="topbar"><div class="topbar-title"><div><strong>Прогресс</strong><small>Только то, что увидели модели на устройстве</small></div></div><button id="clearHistory" class="icon-btn" aria-label="Очистить историю"><svg class="ic"><use href="#i-trash"/></svg></button></header>
     <div class="stats three">
       <div><b id="statTrainings">0</b><span id="statTrainingsLabel">тренировок</span></div>
       <div><b id="statMinutes">0</b><span id="statMinutesLabel">минут</span></div>
@@ -124,7 +122,6 @@
   </section>
 
   <section class="screen screen-profile" data-screen="profile" aria-label="Профиль">
-    <header class="topbar"><div class="topbar-title"><div><strong>Профиль</strong><small>Тренер, эфир и оформление</small></div></div></header>
     <div class="profile-card">
       <span id="profileAvatar" class="avatar big"></span>
       <div class="profile-name"><input id="profileNameInput" maxlength="24" aria-label="Имя"><small id="profileSince"></small></div>
@@ -178,6 +175,7 @@
 
     <button id="logoutBtn" class="btn-ghost danger wide" type="button">Выйти из профиля</button>
     <p class="muted-note center"><svg class="ic"><use href="#i-lock"/></svg> Профиль и история хранятся на устройстве. Видео не отправляется.</p>
+    <button id="clearHistory" class="btn-ghost danger wide" type="button">Удалить прогресс</button>
   </section>
 
   <nav class="tabbar" aria-label="Разделы">

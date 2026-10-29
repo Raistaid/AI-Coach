@@ -43,6 +43,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .screen { display: none; flex: 1; flex-direction: column; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 18px; }
 .screen > * { flex-shrink: 0; }
 .screen-chat > .chat-wrap { flex-shrink: 1; }
+.screen-catalog, .screen-progress, .screen-profile { padding-top: var(--safe-t); }
 .app[data-screen="login"] .screen-login, .app[data-screen="chat"] .screen-chat, .app[data-screen="catalog"] .screen-catalog,
 .app[data-screen="progress"] .screen-progress, .app[data-screen="profile"] .screen-profile, .app[data-screen="start"] .screen-start { display: flex; }
 .app[data-screen="login"] .tabbar, .app[data-live="on"] .tabbar { display: none; }
@@ -103,17 +104,17 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .toolbar-accent { background: var(--brand); color: #fff; border-color: var(--blue); }
 .toolbar-history .ic, .toolbar-accent .ic { width: 22px; height: 22px; stroke-width: 2.2; }
 .app-toolbar ~ .screen .topbar { padding-top: calc(8px + var(--safe-t)); background: var(--bg2); box-shadow: none; }
-.tabbar { flex: none; display: flex; height: 68px; margin: 6px 10px calc(10px + var(--safe-b)); padding: 5px; border: 1px solid var(--line); border-radius: 999px; background: var(--nav-bg); box-shadow: 0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.05); }
-.tab { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 3px 1px; background: none; border: 0; border-radius: 999px; color: var(--text); font-size: 11px; font-weight: 500; transition: background .2s; }
-.tab .ic { width: 26px; height: 26px; stroke-width: 1.7; }
+.tabbar { flex: none; display: flex; height: 60px; margin: 4px 10px calc(8px + var(--safe-b)); padding: 4px; border: 1px solid var(--line); border-radius: 999px; background: var(--nav-bg); box-shadow: 0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.05); }
+.tab { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 2px 1px; background: none; border: 0; border-radius: 999px; color: var(--text); font-size: 10.5px; font-weight: 500; transition: background .2s; }
+.tab .ic { width: 24px; height: 24px; stroke-width: 1.7; }
 .tab[aria-current] { background: var(--nav-active); }
 .tab[aria-current] .ic { stroke-width: 2.2; }
 .tab:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
 .tab:active .ic, .tab:active .avatar { transform: scale(.9); }
-.tab-fab { display: grid; place-items: center; width: 42px; height: 28px; border-radius: 11px; background: var(--brand); color: #fff; box-shadow: var(--shadow-blue); }
-.tab-fab .ic { width: 22px; height: 22px; stroke-width: 2.6; }
+.tab-fab { display: grid; place-items: center; width: 38px; height: 26px; border-radius: 10px; background: var(--brand); color: #fff; box-shadow: var(--shadow-blue); }
+.tab-fab .ic { width: 20px; height: 20px; stroke-width: 2.6; }
 .tab-label { line-height: 1.15; white-space: nowrap; }
-.tab-profile .avatar { width: 28px; height: 28px; font-size: 11px; transition: transform .12s; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--line); }
+.tab-profile .avatar { width: 24px; height: 24px; font-size: 11px; transition: transform .12s; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--line); }
 .setup-reminder { display: flex; align-items: flex-start; gap: 10px; margin: 4px 14px 8px; padding: 12px; border: 1px solid var(--line2); border-radius: 18px; background: var(--bg); }
 .setup-reminder > div { flex: 1; min-width: 0; }
 .setup-reminder strong { font-size: 13px; font-weight: 600; }
@@ -127,7 +128,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .setup-option small { color: var(--muted); font-size: 12px; margin-top: 4px; }
 #voiceSettings, #modelSettings { scroll-margin-top: 64px; }
 .setup-footnote { font-size: 12px; margin-top: 16px; color: var(--muted); }
-@media (max-width: 350px), (max-height: 620px) { .app-toolbar { --toolbar-size: 40px; padding-top: calc(4px + var(--safe-t)); padding-bottom: 4px; } .toolbar-coach { padding-block: 3px; } .toolbar-coach strong { font-size: 15px; } .toolbar-coach small { font-size: 9px; } .tabbar { height: 64px; margin-inline: 6px; } .tab { font-size: 10px; } .setup-reminder { padding: 8px 10px; margin-bottom: 4px; } }
+@media (max-width: 350px), (max-height: 620px) { .app-toolbar { --toolbar-size: 40px; padding-top: calc(4px + var(--safe-t)); padding-bottom: 4px; } .toolbar-coach { padding-block: 3px; } .toolbar-coach strong { font-size: 15px; } .toolbar-coach small { font-size: 9px; } .tabbar { height: 56px; margin-inline: 6px; } .tab { font-size: 10px; } .setup-reminder { padding: 8px 10px; margin-bottom: 4px; } }
 
 /* ───────── Login ───────── */
 .screen-login { align-items: center; padding: 24px; background: radial-gradient(900px 520px at 50% -12%, var(--blue-soft), transparent 70%), var(--bg2); }
@@ -295,7 +296,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .section-title { margin: 22px 20px 8px; font-size: 14px; font-weight: 700; color: var(--muted); }
 .screen-progress .section-title { margin-top: 18px; }
 .group { margin: 0 14px; border-radius: 24px; background: var(--bg); box-shadow: var(--shadow-1); overflow: hidden; }
-.screen-profile .profile-card, .screen-profile .group, .screen-profile #logoutBtn { border: 1.5px solid var(--skill-border); }
+.screen-profile .profile-card, .screen-profile .group, .screen-profile #logoutBtn, .screen-profile #clearHistory { border: 1.5px solid var(--skill-border); }
+.screen-profile #clearHistory:disabled { opacity: .45; cursor: default; }
 .screen-profile .row, .screen-profile .model-card, .screen-profile .details[open] > summary { border-bottom-color: var(--line); }
 .row.stacked { flex-direction: column; align-items: stretch; gap: 8px; }
 .segmented { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface2); }
