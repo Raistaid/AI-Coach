@@ -98,8 +98,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .toolbar-button { display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid var(--line); border-radius: 50%; background: var(--nav-bg); color: var(--text); box-shadow: inset 0 1px 0 rgba(255,255,255,.06); transition: transform .15s; }
 .toolbar-button .ic { width: 27px; height: 27px; stroke-width: 2; }
 .toolbar-button:active { transform: scale(.92); }
-.toolbar-accent { width: 36px; height: 36px; justify-self: center; background: var(--brand); color: #fff; border-color: var(--blue); }
-.toolbar-accent .ic { width: 22px; height: 22px; stroke-width: 2.2; }
+.toolbar-history, .toolbar-accent { width: 36px; height: 36px; justify-self: center; }
+.toolbar-history { background: var(--nav-bg); color: var(--text); border-color: var(--line); }
+.toolbar-accent { background: var(--brand); color: #fff; border-color: var(--blue); }
+.toolbar-history .ic, .toolbar-accent .ic { width: 22px; height: 22px; stroke-width: 2.2; }
 .app-toolbar ~ .screen .topbar { padding-top: 8px; background: var(--bg2); box-shadow: none; }
 .tabbar { flex: none; display: flex; height: 68px; margin: 6px 10px calc(10px + var(--safe-b)); padding: 5px; border: 1px solid var(--line); border-radius: 999px; background: var(--nav-bg); box-shadow: 0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.05); }
 .tab { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 3px 1px; background: none; border: 0; border-radius: 999px; color: var(--text); font-size: 11px; font-weight: 500; transition: background .2s; }
@@ -125,7 +127,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .setup-option small { color: var(--muted); font-size: 12px; margin-top: 4px; }
 #voiceSettings, #modelSettings { scroll-margin-top: 64px; }
 .setup-footnote { font-size: 12px; margin-top: 16px; color: var(--muted); }
-@media (max-width: 350px), (max-height: 620px) { .app-toolbar { padding-top: calc(6px + var(--safe-t)); padding-bottom: 4px; } .toolbar-button { width: 42px; height: 42px; } .toolbar-accent { width: 36px; height: 36px; } .toolbar-coach strong { font-size: 15px; } .tabbar { height: 64px; margin-inline: 6px; } .tab { font-size: 10px; } .setup-reminder { padding: 8px 10px; margin-bottom: 4px; } }
+@media (max-width: 350px), (max-height: 620px) { .app-toolbar { padding-top: calc(6px + var(--safe-t)); padding-bottom: 4px; } .toolbar-button { width: 42px; height: 42px; } .toolbar-history, .toolbar-accent { width: 36px; height: 36px; } .toolbar-coach strong { font-size: 15px; } .tabbar { height: 64px; margin-inline: 6px; } .tab { font-size: 10px; } .setup-reminder { padding: 8px 10px; margin-bottom: 4px; } }
 
 /* ───────── Login ───────── */
 .screen-login { align-items: center; padding: 24px; background: radial-gradient(900px 520px at 50% -12%, var(--blue-soft), transparent 70%), var(--bg2); }
@@ -275,6 +277,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .stats.compact div { background: var(--surface2); box-shadow: none; border-radius: 18px; padding: 12px; }
 .stats.compact b { font-size: 22px; color: var(--text); }
 .history { display: flex; flex-direction: column; margin: 0 14px; padding: 4px 16px; border-radius: 24px; background: var(--bg); box-shadow: var(--shadow-1); }
+.screen-progress .stats > div, .screen-progress .history { border: 1.5px solid var(--skill-border); }
+.screen-progress .history-row { border-bottom-color: var(--skill-border); }
 .history-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line2); }
 .history-row:last-child { border-bottom: 0; }
 .history-row .skill-emoji { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--blue-soft); font-size: 22px; flex: none; }
