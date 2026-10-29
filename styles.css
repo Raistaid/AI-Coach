@@ -295,6 +295,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .section-title { margin: 22px 20px 8px; font-size: 14px; font-weight: 700; color: var(--muted); }
 .screen-progress .section-title { margin-top: 18px; }
 .group { margin: 0 14px; border-radius: 24px; background: var(--bg); box-shadow: var(--shadow-1); overflow: hidden; }
+.screen-profile .profile-card, .screen-profile .group, .screen-profile #logoutBtn { border: 1.5px solid var(--skill-border); }
+.screen-profile .row, .screen-profile .model-card, .screen-profile .details[open] > summary { border-bottom-color: var(--line); }
 .row.stacked { flex-direction: column; align-items: stretch; gap: 8px; }
 .segmented { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface2); }
 .segmented.dark { background: rgba(255, 255, 255, .1); }
