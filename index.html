@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#242526" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#151515" media="(prefers-color-scheme: dark)">
   <meta name="description" content="Aimo — нейро-тренер в прямом эфире: чат с тренером, вертикальный эфир с камеры, распознавание позы и мяча на устройстве.">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -80,19 +80,14 @@
 
   <header class="app-toolbar" aria-label="Быстрые действия">
     <button id="openDrawer" class="toolbar-button" type="button" aria-label="Открыть историю чатов" aria-controls="drawer" aria-expanded="false"><svg class="ic"><use href="#i-more"/></svg></button>
-    <div class="toolbar-actions">
-      <button id="quickCamera" class="toolbar-button" type="button" aria-label="Начать эфир с камерой"><svg class="ic"><use href="#i-camera-solid"/></svg></button>
-      <button id="newChatBtn" class="toolbar-button toolbar-add" type="button" aria-label="Новый чат"><svg class="ic"><use href="#i-add"/></svg></button>
+    <div class="toolbar-coach">
+      <strong id="chatTitle">Тренер Aimo</strong>
+      <small id="chatSub">ИИ на устройстве</small>
     </div>
+    <button id="newChatBtn" class="toolbar-button toolbar-add" type="button" aria-label="Новый чат"><svg class="ic"><use href="#i-add"/></svg></button>
   </header>
 
   <section class="screen screen-chat" data-screen="chat" aria-label="Чат с тренером">
-    <header class="topbar">
-      <div class="topbar-title">
-        <span class="avatar coach online" aria-hidden="true"><svg class="ic"><use href="#i-spark"/></svg></span>
-        <div><strong id="chatTitle">Тренер Aimo</strong><small id="chatSub">в сети · ИИ на устройстве</small></div>
-      </div>
-    </header>
     <aside id="setupReminder" class="setup-reminder" aria-label="Подготовка тренера" hidden>
       <svg class="ic setup-icon" aria-hidden="true"><use href="#i-down"/></svg>
       <div><strong>Тренер на твоём устройстве</strong><p id="setupReminderText"></p><button id="openSetup" class="setup-link" type="button">Подготовить</button></div>
@@ -188,7 +183,7 @@
   <nav class="tabbar" aria-label="Разделы">
     <button class="tab" data-tab="chat" aria-label="Чат" aria-current="page"><svg class="ic"><use href="#i-chats"/></svg><span class="tab-label">Чат</span></button>
     <button class="tab" data-tab="catalog" aria-label="Навыки"><svg class="ic"><use href="#i-grid"/></svg><span class="tab-label">Навыки</span></button>
-    <button class="tab" data-tab="live" aria-label="Эфир: выбрать навык"><svg class="ic"><use href="#i-camera"/></svg><span class="tab-label">Эфир</span></button>
+    <button class="tab tab-live" data-tab="live" aria-label="Эфир: выбрать навык"><span class="tab-fab"><svg class="ic"><use href="#i-add"/></svg></span><span class="tab-label">Эфир</span></button>
     <button class="tab" data-tab="progress" aria-label="Прогресс"><svg class="ic"><use href="#i-chart"/></svg><span class="tab-label">Прогресс</span></button>
     <button class="tab tab-profile" data-tab="profile" aria-label="Профиль"><span id="tabAvatar" class="avatar tiny"></span><span class="tab-label">Профиль</span></button>
   </nav>

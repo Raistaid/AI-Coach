@@ -44,7 +44,7 @@ function applyTheme() {
   for (const meta of themeMetas) {
     const systemDark = (meta.getAttribute('media') || '').includes('dark');
     const dark = prefs.theme === 'system' ? systemDark : prefs.theme === 'dark';
-    meta.setAttribute('content', dark ? '#242526' : '#ffffff');
+    meta.setAttribute('content', dark ? '#151515' : '#ffffff');
   }
 }
 
@@ -99,7 +99,6 @@ setDrawer(false, { focus: false });
 bus.on('drawer', (open) => setDrawer(open));
 $('openDrawer').addEventListener('click', () => { showScreen('chat'); setDrawer(true); });
 $('newChatBtn').addEventListener('click', () => showScreen('chat'));
-$('quickCamera').addEventListener('click', () => startSession({ skillId: prefs.skill, mode: 'camera', pick: true }));
 $('closeDrawer').addEventListener('click', () => setDrawer(false));
 backdropEl.addEventListener('click', () => setDrawer(false));
 document.addEventListener('keydown', (event) => {

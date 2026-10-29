@@ -4,7 +4,7 @@
    (app/viewport.js), every screen scrolls inside itself, the tab bar sits in the flow. */
 :root {
   color-scheme: light;
-  --nav-bg: #fff; --nav-active: #e9eaec; --outer: #e4e6eb; --bg2: #f0f2f5; --bg: #ffffff; --surface2: #f0f2f5; --hover: #e4e6eb;
+  --nav-bg: #fff; --nav-active: #e9eaec; --outer: #fff; --bg2: #fff; --bg: #ffffff; --surface2: #f0f2f5; --hover: #e4e6eb;
   --text: #050505; --muted: #65676b; --line: #ced0d4; --line2: #e4e6eb;
   --blue: #0866ff; --blue-press: #0759d6; --blue-soft: #e7f0ff; --blue-text: #0759d6;
   --brand: linear-gradient(135deg, #0866ff 0%, #0759d6 100%);
@@ -17,14 +17,14 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    color-scheme: dark; --nav-bg: #151515; --nav-active: #343434; --outer: #0f1011; --bg2: #18191a; --bg: #242526; --surface2: #3a3b3c; --hover: #4e4f50;
-    --text: #e4e6eb; --muted: #b0b3b8; --line: #3e4042; --line2: #303233; --blue-soft: #1d3557; --blue-text: #69adff; --them: #303233; --danger: #ff6b81;
+    color-scheme: dark; --nav-bg: #151515; --nav-active: #343434; --outer: #151515; --bg2: #151515; --bg: #151515; --surface2: #3a3b3c; --hover: #4e4f50;
+    --text: #e4e6eb; --muted: #b0b3b8; --line: #3e4042; --line2: #303233; --blue-soft: #1d3557; --blue-text: #69adff; --them: #242424; --danger: #ff6b81;
     --shadow-1: 0 1px 2px rgba(0, 0, 0, .3); --shadow-2: 0 12px 32px rgba(0, 0, 0, .5);
   }
 }
 :root[data-theme="dark"] {
-  color-scheme: dark; --nav-bg: #151515; --nav-active: #343434; --outer: #0f1011; --bg2: #18191a; --bg: #242526; --surface2: #3a3b3c; --hover: #4e4f50;
-  --text: #e4e6eb; --muted: #b0b3b8; --line: #3e4042; --line2: #303233; --blue-soft: #1d3557; --blue-text: #69adff; --them: #303233; --danger: #ff6b81;
+  color-scheme: dark; --nav-bg: #151515; --nav-active: #343434; --outer: #151515; --bg2: #151515; --bg: #151515; --surface2: #3a3b3c; --hover: #4e4f50;
+  --text: #e4e6eb; --muted: #b0b3b8; --line: #3e4042; --line2: #303233; --blue-soft: #1d3557; --blue-text: #69adff; --them: #242424; --danger: #ff6b81;
   --shadow-1: 0 1px 2px rgba(0, 0, 0, .3); --shadow-2: 0 12px 32px rgba(0, 0, 0, .5);
 }
 
@@ -89,14 +89,17 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .topbar-title { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
 .topbar-title strong { display: block; font-size: 18px; font-weight: 800; letter-spacing: -.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-title small { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.app-toolbar { flex: none; display: flex; align-items: center; justify-content: space-between; padding: calc(10px + var(--safe-t)) 18px 8px; background: var(--bg2); }
+.app-toolbar { flex: none; display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; align-items: center; gap: 10px; padding: calc(10px + var(--safe-t)) 18px 8px; background: var(--bg2); }
 .app[data-screen="login"] .app-toolbar, .app[data-live="on"] .app-toolbar { display: none; }
-.toolbar-actions { display: flex; gap: 12px; }
+.toolbar-coach { min-width: 0; text-align: center; }
+.toolbar-coach strong, .toolbar-coach small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toolbar-coach strong { font-size: 17px; font-weight: 750; letter-spacing: -.2px; }
+.toolbar-coach small { margin-top: 3px; font-size: 10px; color: var(--muted); }
 .toolbar-button { display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid var(--line); border-radius: 50%; background: var(--nav-bg); color: var(--text); box-shadow: inset 0 1px 0 rgba(255,255,255,.06); transition: transform .15s; }
 .toolbar-button .ic { width: 27px; height: 27px; stroke-width: 2; }
 .toolbar-button:active { transform: scale(.92); }
-.toolbar-add { background: #20ce68; color: #082c17; border-color: #31e27c; }
-.toolbar-add .ic { width: 32px; height: 32px; stroke-width: 2.2; }
+.toolbar-add { width: 36px; height: 36px; justify-self: center; background: var(--brand); color: #fff; border-color: var(--blue); }
+.toolbar-add .ic { width: 22px; height: 22px; stroke-width: 2.2; }
 .app-toolbar ~ .screen .topbar { padding-top: 8px; background: var(--bg2); box-shadow: none; }
 .tabbar { flex: none; display: flex; height: 76px; margin: 6px 10px calc(10px + var(--safe-b)); padding: 5px; border: 1px solid var(--line); border-radius: 999px; background: var(--nav-bg); box-shadow: 0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.05); }
 .tab { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 5px 1px; background: none; border: 0; border-radius: 999px; color: var(--text); font-size: 11px; font-weight: 500; transition: background .2s; }
@@ -105,6 +108,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .tab[aria-current] .ic { stroke-width: 2.2; }
 .tab:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
 .tab:active .ic, .tab:active .avatar { transform: scale(.9); }
+.tab-fab { display: grid; place-items: center; width: 46px; height: 30px; border-radius: 12px; background: var(--brand); color: #fff; box-shadow: var(--shadow-blue); }
+.tab-fab .ic { width: 22px; height: 22px; stroke-width: 2.6; }
 .tab-label { line-height: 1.15; white-space: nowrap; }
 .tab-profile .avatar { width: 28px; height: 28px; font-size: 11px; transition: transform .12s; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--line); }
 .setup-reminder { display: flex; align-items: flex-start; gap: 10px; margin: 4px 14px 8px; padding: 12px; border: 1px solid var(--line2); border-radius: 18px; background: var(--bg); }
@@ -120,7 +125,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .setup-option small { color: var(--muted); font-size: 12px; margin-top: 4px; }
 #voiceSettings, #modelSettings { scroll-margin-top: 64px; }
 .setup-footnote { font-size: 12px; margin-top: 16px; color: var(--muted); }
-@media (max-width: 350px), (max-height: 620px) { .app-toolbar { padding-top: calc(6px + var(--safe-t)); padding-bottom: 4px; } .toolbar-button { width: 42px; height: 42px; } .tabbar { height: 68px; margin-inline: 6px; } .tab { font-size: 10px; } .setup-reminder { padding: 8px 10px; margin-bottom: 4px; } }
+@media (max-width: 350px), (max-height: 620px) { .app-toolbar { padding-top: calc(6px + var(--safe-t)); padding-bottom: 4px; } .toolbar-button { width: 42px; height: 42px; } .toolbar-add { width: 36px; height: 36px; } .toolbar-coach strong { font-size: 15px; } .tabbar { height: 68px; margin-inline: 6px; } .tab { font-size: 10px; } .setup-reminder { padding: 8px 10px; margin-bottom: 4px; } }
 
 /* ───────── Login ───────── */
 .screen-login { align-items: center; padding: 24px; background: radial-gradient(900px 520px at 50% -12%, var(--blue-soft), transparent 70%), var(--bg2); }
