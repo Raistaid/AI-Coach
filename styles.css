@@ -283,7 +283,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .history-row > div { min-width: 0; overflow-wrap: anywhere; }
 .history-progress { margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: var(--text); }
 .history-progress.is-best { color: var(--blue); font-weight: 600; }
-.history-note { margin: 16px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.history-note { margin: 12px 30px 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
 .empty { margin: 0; padding: 18px 4px; color: var(--muted); font-size: 14px; text-align: center; line-height: 1.5; }
 
 /* ───────── Profile & settings ───────── */

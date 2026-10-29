@@ -198,6 +198,7 @@ function renderProgress() {
   text('statMinutes', stats.minutes); text('statMinutesLabel', tail(stats.minutes, ['минута', 'минуты', 'минут']));
   text('statDays', stats.days); text('statDaysLabel', `${tail(stats.days, ['день', 'дня', 'дней'])} подряд`);
   const list = $('historyList'); list.replaceChildren(); $('clearHistory').disabled = history.length === 0;
+  $('historyNote').hidden = history.length === 0;
   if (!history.length) { list.append(el('p', 'empty', 'Здесь появятся итоги эфиров. Демо в историю не записывается, видео не хранится.')); return; }
   for (const [index, session] of history.entries()) {
     const skill = getSkill(session.skill);
@@ -209,7 +210,6 @@ function renderProgress() {
     copy.append(el('p', `history-progress${progress?.isNewBest ? ' is-best' : ''}`, progress ? progress.text : 'Для этой записи сравнение недоступно.'));
     row.append(copy); list.append(row);
   }
-  list.append(el('p', 'history-note', 'Сравниваются тренировки одного навыка и источника, до 50 последних.'));
 }
 $('clearHistory').addEventListener('click', () => { history = []; store.saveHistory(history); renderProgress(); chat.setHistory(history); toast('История очищена'); });
 
