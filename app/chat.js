@@ -113,7 +113,7 @@ function messageNode(message) {
   if (message.type === 'route') bubble.append(routeCard(message.data || {}));
   if (message.type === 'skill') bubble.append(skillCard(message.data || {}));
   if (message.type === 'summary') bubble.append(summaryCard(message.data || {}));
-  if (message.meta) bubble.append(el('small', 'msg-meta', message.meta));
+  if (message.meta && !/^живой тренер\s*·\s*проверено/iu.test(message.meta)) bubble.append(el('small', 'msg-meta', message.meta));
   const foot = el('div', 'msg-foot');
   foot.append(el('time', 'msg-time', timeLabel(message.at)));
   bubble.append(foot); wrap.append(bubble);
@@ -335,11 +335,11 @@ async function llmTalk(query, intent) {
   const checked = validateChatReply(raw, context, query);
   if (!checked.ok) { console.warn('Aimo chat: LLM reply rejected,', checked.reason, intent); return false; }
   if (ctx.thread !== thread) { // store the reply in the chat it belongs to
-    const { thread: updated } = store.appendMessage(thread, { role: 'coach', type: 'text', text: checked.text, meta: 'живой тренер · проверено' });
+    const { thread: updated } = store.appendMessage(thread, { role: 'coach', type: 'text', text: checked.text });
     ctx.chats = store.replaceThread(ctx.chats, updated); store.saveChats(ctx.chats); renderDrawer();
     return true;
   }
-  push({ role: 'coach', type: 'text', text: checked.text, meta: 'живой тренер · проверено', ...(invitesToTrain(checked.text) ? { offer: true } : {}) });
+  push({ role: 'coach', type: 'text', text: checked.text, ...(invitesToTrain(checked.text) ? { offer: true } : {}) });
   return true;
 }
 
@@ -364,7 +364,7 @@ async function plan(query) {
   const reply = result.reply || planReplyText(result.plan, SKILL_LIST);
   ctx.llmHistory.push({ role: 'user', content: query }, { role: 'assistant', content: reply });
   setTyping(false);
-  push({ role: 'coach', type: 'text', text: reply, meta: viaLlm ? 'живой тренер · проверено по каталогу' : note ? `подбор по ключевым словам · ${note}` : '' });
+  push({ role: 'coach', type: 'text', text: reply, meta: !viaLlm && note ? `подбор по ключевым словам · ${note}` : '' });
   if (result.plan.length) {
     ctx.prefs.plan = result.plan; ctx.prefs.planGoal = query; ctx.prefs.skill = result.plan[0]; store.savePrefs(ctx.prefs);
     push({ role: 'coach', type: 'route', data: { plan: result.plan, goal: query }, skill: result.plan[0] });

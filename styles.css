@@ -89,19 +89,19 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .topbar-title { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
 .topbar-title strong { display: block; font-size: 18px; font-weight: 800; letter-spacing: -.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-title small { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.app-toolbar { flex: none; display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; align-items: center; gap: 10px; padding: calc(10px + var(--safe-t)) 18px 8px; background: var(--bg2); }
+.app-toolbar { --toolbar-size: 52px; --coach-pill-bg: color-mix(in srgb, var(--nav-bg) 92%, var(--text) 8%); flex: none; display: grid; grid-template-columns: var(--toolbar-size) minmax(0, 1fr) var(--toolbar-size); align-items: center; gap: 8px; padding: calc(10px + var(--safe-t)) 14px 8px; background: var(--bg2); }
 .app[data-screen="login"] .app-toolbar, .app[data-live="on"] .app-toolbar { display: none; }
-.toolbar-coach { min-width: 0; max-width: 100%; width: fit-content; justify-self: center; padding: 6px 16px; border: 1px solid var(--line); border-radius: 999px; background: color-mix(in srgb, var(--nav-bg) 92%, var(--text) 8%); box-shadow: inset 0 1px 0 rgba(255,255,255,.06); text-align: center; }
+.toolbar-coach { min-width: 0; max-width: 240px; width: 100%; height: var(--toolbar-size); display: flex; flex-direction: column; justify-content: center; justify-self: center; padding: 4px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--coach-pill-bg); box-shadow: inset 0 1px 0 rgba(255,255,255,.06); text-align: center; }
 .toolbar-coach strong, .toolbar-coach small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .toolbar-coach strong { font-size: 17px; font-weight: 750; letter-spacing: -.2px; }
 .toolbar-coach small { margin-top: 3px; font-size: 10px; color: var(--muted); }
 .toolbar-button { display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid var(--line); border-radius: 50%; background: var(--nav-bg); color: var(--text); box-shadow: inset 0 1px 0 rgba(255,255,255,.06); transition: transform .15s; }
 .toolbar-button .ic { width: 27px; height: 27px; stroke-width: 2; }
 .toolbar-button:active { transform: scale(.92); }
-.toolbar-history, .toolbar-accent { width: 36px; height: 36px; justify-self: center; }
-.toolbar-history { background: var(--nav-bg); color: var(--text); border-color: var(--line); }
+.toolbar-history, .toolbar-accent { width: var(--toolbar-size); height: var(--toolbar-size); justify-self: center; }
+.toolbar-history { background: var(--coach-pill-bg); color: var(--text); border-color: var(--line); }
 .toolbar-accent { background: var(--brand); color: #fff; border-color: var(--blue); }
-.toolbar-history .ic, .toolbar-accent .ic { width: 22px; height: 22px; stroke-width: 2.2; }
+.toolbar-history .ic, .toolbar-accent .ic { width: 24px; height: 24px; stroke-width: 2.2; }
 .app-toolbar ~ .screen .topbar { padding-top: 8px; background: var(--bg2); box-shadow: none; }
 .tabbar { flex: none; display: flex; height: 68px; margin: 6px 10px calc(10px + var(--safe-b)); padding: 5px; border: 1px solid var(--line); border-radius: 999px; background: var(--nav-bg); box-shadow: 0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.05); }
 .tab { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 3px 1px; background: none; border: 0; border-radius: 999px; color: var(--text); font-size: 11px; font-weight: 500; transition: background .2s; }
@@ -127,7 +127,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .setup-option small { color: var(--muted); font-size: 12px; margin-top: 4px; }
 #voiceSettings, #modelSettings { scroll-margin-top: 64px; }
 .setup-footnote { font-size: 12px; margin-top: 16px; color: var(--muted); }
-@media (max-width: 350px), (max-height: 620px) { .app-toolbar { padding-top: calc(6px + var(--safe-t)); padding-bottom: 4px; } .toolbar-button { width: 42px; height: 42px; } .toolbar-history, .toolbar-accent { width: 36px; height: 36px; } .toolbar-coach strong { font-size: 15px; } .tabbar { height: 64px; margin-inline: 6px; } .tab { font-size: 10px; } .setup-reminder { padding: 8px 10px; margin-bottom: 4px; } }
+@media (max-width: 350px), (max-height: 620px) { .app-toolbar { --toolbar-size: 48px; padding-top: calc(6px + var(--safe-t)); padding-bottom: 4px; } .toolbar-coach strong { font-size: 15px; } .tabbar { height: 64px; margin-inline: 6px; } .tab { font-size: 10px; } .setup-reminder { padding: 8px 10px; margin-bottom: 4px; } }
 
 /* ───────── Login ───────── */
 .screen-login { align-items: center; padding: 24px; background: radial-gradient(900px 520px at 50% -12%, var(--blue-soft), transparent 70%), var(--bg2); }
