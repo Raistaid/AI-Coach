@@ -197,8 +197,8 @@ function renderChips() {
 export function renderHeader() {
   if (!ctx.prefs) return; // the model manager may report before the chat is initialised
   const llm = ctx.llmState() || {};
-  const tail = llm.loaded ? `${llm.label || 'модель'} на устройстве` : llm.loading ? 'модель запускается…' : 'ИИ на устройстве';
-  text('chatSub', `${PERSONALITIES[ctx.prefs.personality].name} тренер · ${tail}`);
+  const tail = llm.loaded ? `${llm.label || 'модель'} на устройстве` : llm.loading ? 'модель запускается…' : '';
+  text('chatSub', [`${PERSONALITIES[ctx.prefs.personality].name} тренер`, tail].filter(Boolean).join(' · '));
 }
 
 export function renderDrawer() {
