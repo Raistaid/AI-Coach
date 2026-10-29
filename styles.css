@@ -288,15 +288,16 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .empty { margin: 0; padding: 18px 4px; color: var(--muted); font-size: 14px; text-align: center; line-height: 1.5; }
 
 /* ───────── Profile & settings ───────── */
-.profile-card { margin: 14px 14px 0; padding: 24px 16px 16px; border-radius: 28px; background: var(--bg); box-shadow: var(--shadow-1); display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
-.profile-name { width: 100%; display: flex; flex-direction: column; gap: 2px; }
-.profile-name input { width: 100%; padding: 4px 0; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text); font-size: 22px; font-weight: 800; text-align: center; }
+.profile-card { margin: 12px 14px 0; padding: 8px 6px; background: none; border: 0; box-shadow: none; display: flex; align-items: center; gap: 14px; }
+.profile-card .avatar.big { width: 60px; height: 60px; font-size: 23px; box-shadow: 0 0 0 3px var(--bg), 0 0 0 4px var(--blue); }
+.profile-name { min-width: 0; flex: 1; width: 100%; display: flex; flex-direction: column; gap: 2px; }
+.profile-name input { width: 100%; padding: 4px 0; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text); font-size: 20px; font-weight: 750; text-align: left; }
 .profile-name input:focus { outline: 0; border-bottom-color: var(--blue); }
-.profile-name small { font-size: 13px; color: var(--muted); }
+.profile-name small { font-size: 12px; color: var(--muted); }
 .section-title { margin: 22px 20px 8px; font-size: 14px; font-weight: 700; color: var(--muted); }
 .screen-progress .section-title { margin-top: 18px; }
 .group { margin: 0 14px; border-radius: 24px; background: var(--bg); box-shadow: var(--shadow-1); overflow: hidden; }
-.screen-profile .profile-card, .screen-profile .group, .screen-profile #logoutBtn, .screen-profile #clearHistory { border: 1.5px solid var(--skill-border); }
+.screen-profile .group, .screen-profile #logoutBtn, .screen-profile #clearHistory { border: 1.5px solid var(--skill-border); }
 .screen-profile #clearHistory:disabled { opacity: .45; cursor: default; }
 .screen-profile .row, .screen-profile .model-card, .screen-profile .details[open] > summary { border-bottom-color: var(--line); }
 .row.stacked { flex-direction: column; align-items: stretch; gap: 8px; }
@@ -308,6 +309,12 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .segment { min-height: 38px; padding: 6px 8px; border: 0; border-radius: 10px; background: none; color: var(--muted); font-size: 14px; font-weight: 600; transition: background .15s, color .15s; }
 .segment[aria-checked="true"] { background: var(--bg); color: var(--text); box-shadow: var(--shadow-1); }
 .segmented-note { font-size: 12px; color: var(--muted); }
+#personalityRow { position: relative; isolation: isolate; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-flow: row; gap: 0; padding: 4px; border: 1px solid color-mix(in srgb, var(--text) 20%, transparent); border-radius: 999px; background: linear-gradient(135deg, color-mix(in srgb, var(--text) 9%, transparent), transparent 65%), color-mix(in srgb, var(--blue-soft) 24%, var(--bg) 76%); box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 4px 16px rgba(0,0,0,.08); backdrop-filter: blur(18px) saturate(1.5); -webkit-backdrop-filter: blur(18px) saturate(1.5); }
+#personalityRow::before { content: ""; position: absolute; z-index: 0; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px) / 3); border: 1px solid color-mix(in srgb, var(--text) 24%, transparent); border-radius: 999px; background: linear-gradient(145deg, rgba(255,255,255,.22), rgba(255,255,255,.04) 55%, rgba(255,255,255,.12)); box-shadow: inset 0 1px 0 rgba(255,255,255,.4), inset 0 -1px 0 rgba(255,255,255,.05), 0 3px 12px rgba(0,0,0,.16); transform: translateX(calc(var(--selected-index, 2) * 100%)); transition: transform .32s cubic-bezier(.2,.8,.2,1); pointer-events: none; }
+#personalityRow .segment { position: relative; z-index: 1; min-width: 0; padding-inline: 4px; border-radius: 999px; background: transparent; box-shadow: none; font-size: 13px; }
+#personalityRow .segment[aria-checked="true"] { color: var(--text); background: transparent; box-shadow: none; }
+#modelSettings { margin-top: 20px; }
+
 .details > summary { list-style: none; cursor: pointer; border-bottom: 0; }
 .details > summary::-webkit-details-marker { display: none; }
 .details[open] > summary { border-bottom: 1px solid var(--line2); }
