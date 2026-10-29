@@ -9,7 +9,7 @@
 
 **Разработчики:** [Raistaid](https://github.com/Raistaid) · [meazuk1](https://github.com/meazuk1).
 
-Релиз **0.0.4** — [страница версии и загрузка](https://github.com/noMad-dreamteam/Aimo/releases/tag/v0.0.4).
+Релиз **0.0.6** — [страница версии и загрузка](https://github.com/noMad-dreamteam/Aimo/releases/tag/v0.0.6).
 
 **Открыть приложение: [Aimo](https://nomad-dreamteam.github.io/Aimo/)** — нажмите на ссылку с телефона или компьютера.
 
