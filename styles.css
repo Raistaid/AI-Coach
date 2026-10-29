@@ -4,7 +4,7 @@
    (app/viewport.js), every screen scrolls inside itself, the tab bar sits in the flow. */
 :root {
   color-scheme: light;
-  --nav-bg: #fff; --nav-active: #e9eaec; --outer: #fff; --bg2: #fff; --bg: #ffffff; --surface2: #f0f2f5; --hover: #e4e6eb;
+  --skill-border: #aab5c5; --nav-bg: #fff; --nav-active: #e9eaec; --outer: #fff; --bg2: #fff; --bg: #ffffff; --surface2: #f0f2f5; --hover: #e4e6eb;
   --text: #050505; --muted: #65676b; --line: #ced0d4; --line2: #e4e6eb;
   --blue: #0866ff; --blue-press: #0759d6; --blue-soft: #e7f0ff; --blue-text: #0759d6;
   --brand: linear-gradient(135deg, #0866ff 0%, #0759d6 100%);
@@ -17,13 +17,13 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    color-scheme: dark; --nav-bg: #151515; --nav-active: #343434; --outer: #151515; --bg2: #151515; --bg: #151515; --surface2: #3a3b3c; --hover: #4e4f50;
+    color-scheme: dark; --skill-border: #52627b; --nav-bg: #151515; --nav-active: #343434; --outer: #151515; --bg2: #151515; --bg: #151515; --surface2: #3a3b3c; --hover: #4e4f50;
     --text: #e4e6eb; --muted: #b0b3b8; --line: #3e4042; --line2: #303233; --blue-soft: #1d3557; --blue-text: #69adff; --them: #242424; --danger: #ff6b81;
     --shadow-1: 0 1px 2px rgba(0, 0, 0, .3); --shadow-2: 0 12px 32px rgba(0, 0, 0, .5);
   }
 }
 :root[data-theme="dark"] {
-  color-scheme: dark; --nav-bg: #151515; --nav-active: #343434; --outer: #151515; --bg2: #151515; --bg: #151515; --surface2: #3a3b3c; --hover: #4e4f50;
+  color-scheme: dark; --skill-border: #52627b; --nav-bg: #151515; --nav-active: #343434; --outer: #151515; --bg2: #151515; --bg: #151515; --surface2: #3a3b3c; --hover: #4e4f50;
   --text: #e4e6eb; --muted: #b0b3b8; --line: #3e4042; --line2: #303233; --blue-soft: #1d3557; --blue-text: #69adff; --them: #242424; --danger: #ff6b81;
   --shadow-1: 0 1px 2px rgba(0, 0, 0, .3); --shadow-2: 0 12px 32px rgba(0, 0, 0, .5);
 }
@@ -98,8 +98,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .toolbar-button { display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid var(--line); border-radius: 50%; background: var(--nav-bg); color: var(--text); box-shadow: inset 0 1px 0 rgba(255,255,255,.06); transition: transform .15s; }
 .toolbar-button .ic { width: 27px; height: 27px; stroke-width: 2; }
 .toolbar-button:active { transform: scale(.92); }
-.toolbar-add { width: 36px; height: 36px; justify-self: center; background: var(--brand); color: #fff; border-color: var(--blue); }
-.toolbar-add .ic { width: 22px; height: 22px; stroke-width: 2.2; }
+.toolbar-accent { width: 36px; height: 36px; justify-self: center; background: var(--brand); color: #fff; border-color: var(--blue); }
+.toolbar-accent .ic { width: 22px; height: 22px; stroke-width: 2.2; }
 .app-toolbar ~ .screen .topbar { padding-top: 8px; background: var(--bg2); box-shadow: none; }
 .tabbar { flex: none; display: flex; height: 68px; margin: 6px 10px calc(10px + var(--safe-b)); padding: 5px; border: 1px solid var(--line); border-radius: 999px; background: var(--nav-bg); box-shadow: 0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.05); }
 .tab { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 3px 1px; background: none; border: 0; border-radius: 999px; color: var(--text); font-size: 11px; font-weight: 500; transition: background .2s; }
@@ -125,7 +125,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .setup-option small { color: var(--muted); font-size: 12px; margin-top: 4px; }
 #voiceSettings, #modelSettings { scroll-margin-top: 64px; }
 .setup-footnote { font-size: 12px; margin-top: 16px; color: var(--muted); }
-@media (max-width: 350px), (max-height: 620px) { .app-toolbar { padding-top: calc(6px + var(--safe-t)); padding-bottom: 4px; } .toolbar-button { width: 42px; height: 42px; } .toolbar-add { width: 36px; height: 36px; } .toolbar-coach strong { font-size: 15px; } .tabbar { height: 64px; margin-inline: 6px; } .tab { font-size: 10px; } .setup-reminder { padding: 8px 10px; margin-bottom: 4px; } }
+@media (max-width: 350px), (max-height: 620px) { .app-toolbar { padding-top: calc(6px + var(--safe-t)); padding-bottom: 4px; } .toolbar-button { width: 42px; height: 42px; } .toolbar-accent { width: 36px; height: 36px; } .toolbar-coach strong { font-size: 15px; } .tabbar { height: 64px; margin-inline: 6px; } .tab { font-size: 10px; } .setup-reminder { padding: 8px 10px; margin-bottom: 4px; } }
 
 /* ───────── Login ───────── */
 .screen-login { align-items: center; padding: 24px; background: radial-gradient(900px 520px at 50% -12%, var(--blue-soft), transparent 70%), var(--bg2); }
@@ -238,8 +238,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .catalog-head h3 { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -.2px; }
 .catalog-head small { font-size: 12px; color: var(--muted); }
 .catalog-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.skill-tile { display: flex; flex-direction: column; gap: 4px; min-height: 132px; padding: 14px; border: 0; border-radius: 22px; background: var(--bg); color: var(--text); text-align: left; box-shadow: var(--shadow-1); transition: transform .12s, box-shadow .15s; }
-.skill-tile:active { transform: scale(.97); }
+.skill-tile { display: flex; flex-direction: column; gap: 4px; min-height: 132px; padding: 14px; border: 1.5px solid var(--skill-border); border-radius: 22px; background: var(--bg); color: var(--text); text-align: left; box-shadow: var(--shadow-1); transition: transform .12s, box-shadow .15s, border-color .15s; }
+.skill-tile:active { transform: scale(.97); border-color: var(--blue-text); }
 .skill-tile .skill-emoji { width: 46px; height: 46px; border-radius: 15px; display: grid; place-items: center; background: var(--blue-soft); font-size: 25px; }
 .skill-tile b { margin-top: auto; padding-top: 8px; font-size: 15px; font-weight: 700; line-height: 1.25; letter-spacing: -.1px; }
 .skill-tile small { font-size: 12px; color: var(--muted); }

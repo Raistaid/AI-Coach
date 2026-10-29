@@ -6,7 +6,7 @@
 // URLs carry the version and never change. WebLLM keeps its own model caches and Piper
 // voices live in OPFS; neither is touched here. Piper runtime dependencies are loaded from a CDN on demand;
 // offline speech falls back to the browser voice.
-const CACHE = 'aimo-v12';
+const CACHE = 'aimo-v13';
 const SHELL = [
   './', './index.html', './styles.css', './app-icon-32.png', './app-icon-180.png', './app-icon-192.png', './app-icon-512.png', './manifest.webmanifest',
   './app/camera.js', './app/main.js', './app/chat.js', './app/live.js', './app/store.js', './app/ui.js', './app/viewport.js',
