@@ -4,7 +4,7 @@
    (app/viewport.js), every screen scrolls inside itself, the tab bar sits in the flow. */
 :root {
   color-scheme: light;
-  --outer: #e4e6eb; --bg2: #f0f2f5; --bg: #ffffff; --surface2: #f0f2f5; --hover: #e4e6eb;
+  --nav-bg: #fff; --nav-active: #e9eaec; --outer: #e4e6eb; --bg2: #f0f2f5; --bg: #ffffff; --surface2: #f0f2f5; --hover: #e4e6eb;
   --text: #050505; --muted: #65676b; --line: #ced0d4; --line2: #e4e6eb;
   --blue: #0866ff; --blue-press: #0759d6; --blue-soft: #e7f0ff; --blue-text: #0759d6;
   --brand: linear-gradient(135deg, #0866ff 0%, #0759d6 100%);
@@ -17,13 +17,13 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    color-scheme: dark; --outer: #0f1011; --bg2: #18191a; --bg: #242526; --surface2: #3a3b3c; --hover: #4e4f50;
+    color-scheme: dark; --nav-bg: #151515; --nav-active: #343434; --outer: #0f1011; --bg2: #18191a; --bg: #242526; --surface2: #3a3b3c; --hover: #4e4f50;
     --text: #e4e6eb; --muted: #b0b3b8; --line: #3e4042; --line2: #303233; --blue-soft: #1d3557; --blue-text: #69adff; --them: #303233; --danger: #ff6b81;
     --shadow-1: 0 1px 2px rgba(0, 0, 0, .3); --shadow-2: 0 12px 32px rgba(0, 0, 0, .5);
   }
 }
 :root[data-theme="dark"] {
-  color-scheme: dark; --outer: #0f1011; --bg2: #18191a; --bg: #242526; --surface2: #3a3b3c; --hover: #4e4f50;
+  color-scheme: dark; --nav-bg: #151515; --nav-active: #343434; --outer: #0f1011; --bg2: #18191a; --bg: #242526; --surface2: #3a3b3c; --hover: #4e4f50;
   --text: #e4e6eb; --muted: #b0b3b8; --line: #3e4042; --line2: #303233; --blue-soft: #1d3557; --blue-text: #69adff; --them: #303233; --danger: #ff6b81;
   --shadow-1: 0 1px 2px rgba(0, 0, 0, .3); --shadow-2: 0 12px 32px rgba(0, 0, 0, .5);
 }
@@ -89,16 +89,38 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .topbar-title { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
 .topbar-title strong { display: block; font-size: 18px; font-weight: 800; letter-spacing: -.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-title small { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tabbar { flex: none; display: flex; height: calc(var(--tab-h) + 8px); margin: 0 8px calc(8px + var(--safe-b)); padding: 6px 6px 4px; border: 1px solid rgba(255, 255, 255, .16); border-radius: 28px; background: rgba(255, 255, 255, .12); box-shadow: 0 10px 30px rgba(0, 0, 0, .22), inset 0 1px 0 rgba(255, 255, 255, .2); backdrop-filter: blur(24px) saturate(1.45); -webkit-backdrop-filter: blur(24px) saturate(1.45); }
-.tab { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; margin: 0 1px; padding: 3px 0; background: none; border: 0; border-radius: 22px; color: var(--muted); font-size: 11px; font-weight: 600; transition: color .15s, background .2s, box-shadow .2s; }
-.tab .ic { width: 25px; height: 25px; }
-.tab[aria-current] { color: var(--text); background: color-mix(in srgb, var(--surface2) 82%, transparent); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2), 0 2px 12px rgba(0, 0, 0, .08); }
-.tab[aria-current] .ic { stroke-width: 2.3; }
+.app-toolbar { flex: none; display: flex; align-items: center; justify-content: space-between; padding: calc(10px + var(--safe-t)) 18px 8px; background: var(--bg2); }
+.app[data-screen="login"] .app-toolbar, .app[data-live="on"] .app-toolbar { display: none; }
+.toolbar-actions { display: flex; gap: 12px; }
+.toolbar-button { display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid var(--line); border-radius: 50%; background: var(--nav-bg); color: var(--text); box-shadow: inset 0 1px 0 rgba(255,255,255,.06); transition: transform .15s; }
+.toolbar-button .ic { width: 27px; height: 27px; stroke-width: 2; }
+.toolbar-button:active { transform: scale(.92); }
+.toolbar-add { background: #20ce68; color: #082c17; border-color: #31e27c; }
+.toolbar-add .ic { width: 32px; height: 32px; stroke-width: 2.2; }
+.app-toolbar ~ .screen .topbar { padding-top: 8px; background: var(--bg2); box-shadow: none; }
+.tabbar { flex: none; display: flex; height: 76px; margin: 6px 10px calc(10px + var(--safe-b)); padding: 5px; border: 1px solid var(--line); border-radius: 999px; background: var(--nav-bg); box-shadow: 0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.05); }
+.tab { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 5px 1px; background: none; border: 0; border-radius: 999px; color: var(--text); font-size: 11px; font-weight: 500; transition: background .2s; }
+.tab .ic { width: 28px; height: 28px; stroke-width: 1.7; }
+.tab[aria-current] { background: var(--nav-active); }
+.tab[aria-current] .ic { stroke-width: 2.2; }
 .tab:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
 .tab:active .ic, .tab:active .avatar { transform: scale(.9); }
-.tab-label { line-height: 1; }
-.tab-profile .avatar { width: 26px; height: 26px; font-size: 11px; transition: transform .12s; }
-.tab-profile[aria-current] .avatar { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--blue); }
+.tab-label { line-height: 1.15; white-space: nowrap; }
+.tab-profile .avatar { width: 28px; height: 28px; font-size: 11px; transition: transform .12s; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--line); }
+.setup-reminder { display: flex; align-items: flex-start; gap: 10px; margin: 4px 14px 8px; padding: 12px; border: 1px solid var(--line2); border-radius: 18px; background: var(--bg); }
+.setup-reminder > div { flex: 1; min-width: 0; }
+.setup-reminder strong { font-size: 13px; font-weight: 600; }
+.setup-reminder p { margin: 3px 0 5px; font-size: 12px; color: var(--muted); line-height: 1.4; }
+.setup-icon { width: 20px; height: 20px; margin-top: 2px; color: var(--muted); }
+.setup-reminder .icon-btn { width: 32px; height: 32px; margin: -4px -4px 0 0; background: none; }
+.setup-reminder .icon-btn .ic { width: 16px; height: 16px; }
+.setup-link { min-height: 32px; padding: 4px 0; background: none; border: 0; color: var(--blue-text); font-size: 12px; font-weight: 600; }
+.setup-option { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--line2); }
+.setup-option strong, .setup-option small { display: block; }
+.setup-option small { color: var(--muted); font-size: 12px; margin-top: 4px; }
+#voiceSettings, #modelSettings { scroll-margin-top: 64px; }
+.setup-footnote { font-size: 12px; margin-top: 16px; color: var(--muted); }
+@media (max-width: 350px), (max-height: 620px) { .app-toolbar { padding-top: calc(6px + var(--safe-t)); padding-bottom: 4px; } .toolbar-button { width: 42px; height: 42px; } .tabbar { height: 68px; margin-inline: 6px; } .tab { font-size: 10px; } .setup-reminder { padding: 8px 10px; margin-bottom: 4px; } }
 
 /* ───────── Login ───────── */
 .screen-login { align-items: center; padding: 24px; background: radial-gradient(900px 520px at 50% -12%, var(--blue-soft), transparent 70%), var(--bg2); }

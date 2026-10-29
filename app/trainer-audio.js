@@ -4,7 +4,7 @@ import { configureUtterance } from './speech.js';
 
 const abortError = () => new DOMException('Озвучивание отменено', 'AbortError');
 
-export function createTrainerAudio({ store = createVoiceStore(), makeWorker = () => new Worker(new URL('./tts-worker.js', import.meta.url), { type: 'module' }), makeContext = () => new (window.AudioContext || window.webkitAudioContext)(), synth = () => globalThis.speechSynthesis } = {}) {
+export function createTrainerAudio({ store = createVoiceStore(), makeWorker = () => new Worker(new URL('./tts-worker.js', import.meta.url)), makeContext = () => new (window.AudioContext || window.webkitAudioContext)(), synth = () => globalThis.speechSynthesis } = {}) {
   const listeners = new Set();
   const states = Object.fromEntries(LOCAL_VOICES.map(v => [v.id, { status: 'unknown', progress: 0 }]));
   const versions = Object.fromEntries(LOCAL_VOICES.map(v => [v.id, 0]));

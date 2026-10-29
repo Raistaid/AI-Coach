@@ -23,6 +23,7 @@ async function walk(dir = '') {
     const patterns = file.endsWith('.js') ? [
       /\b(?:import|export)\s+(?:[^;'"\n]*?\s+from\s*)?['"]([^'"]+)['"]/g,
       /\bimport\s*\(\s*['"]([^'"]+)['"]/g,
+      /\bimportScripts\s*\(\s*['"]([^'"]+)['"]/g,
       /new\s+URL\(\s*['"]([^'"]+)['"]\s*,\s*import\.meta\.url/g,
     ] : file.endsWith('.html') ? [/\b(?:src|href)\s*=\s*['"]([^'"]+)['"]/g] : [/url\(\s*['"]?([^'"\s)]+)['"]?\s*\)/g];
     for (const pattern of patterns) for (const match of text.matchAll(pattern)) await reference(file, match[1]);

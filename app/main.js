@@ -24,6 +24,8 @@ const makeModelManager = () => createModelManager({ models: LLM_MODELS, load: cr
 let modelManager = makeModelManager();
 let liveStartRequest = 0;
 let sheetSkillId = null;
+let setupDismissed = false;
+try { setupDismissed = sessionStorage.getItem('aimo:setup-dismissed') === 'yes'; } catch { /* storage can be unavailable */ }
 const steps = (n) => pluralize(n, ['шаг', 'шага', 'шагов']);
 
 /* ───────────── Viewport & keyboard ───────────── */
@@ -95,7 +97,9 @@ function setDrawer(open, { focus = true } = {}) {
 }
 setDrawer(false, { focus: false });
 bus.on('drawer', (open) => setDrawer(open));
-$('openDrawer').addEventListener('click', () => setDrawer(true));
+$('openDrawer').addEventListener('click', () => { showScreen('chat'); setDrawer(true); });
+$('newChatBtn').addEventListener('click', () => showScreen('chat'));
+$('quickCamera').addEventListener('click', () => startSession({ skillId: prefs.skill, mode: 'camera', pick: true }));
 $('closeDrawer').addEventListener('click', () => setDrawer(false));
 backdropEl.addEventListener('click', () => setDrawer(false));
 document.addEventListener('keydown', (event) => {
@@ -249,6 +253,33 @@ document.querySelectorAll('input[name=llmModel]').forEach(radio => radio.addEven
 bus.on('prefs-changed', () => { applyPreferences(); if (app.dataset.screen === 'profile') renderPersonalities();  chat.renderHeader(); });
 
 /* ───────────── Local LLM ───────────── */
+function renderSetupReminder() {
+  const voice = trainerAudio.states['piper:ru_RU-dmitri-medium'];
+  const needsVoice = trainerAudio.supported && voice?.status === 'missing';
+  const models = Object.values(modelManager.states);
+  const needsModel = supportsWebGPU() && !models.some(model => model.status === 'cached') && models.some(model => ['missing', 'error'].includes(model.status));
+  $('setupReminder').hidden = setupDismissed || (!needsVoice && !needsModel);
+  text('setupReminderText', needsVoice && needsModel ? 'Скачай голос Дмитрия и Qwen для озвучивания и живого разговора.' : needsVoice ? 'Скачай голос Дмитрия, чтобы тренер озвучивал подсказки.' : 'Скачай Qwen, чтобы свободно общаться с тренером.');
+  $('setupModelRow').hidden = !supportsWebGPU();
+}
+$('dismissSetup').addEventListener('click', () => {
+  setupDismissed = true;
+  try { sessionStorage.setItem('aimo:setup-dismissed', 'yes'); } catch { /* dismissal still works for this page */ }
+  renderSetupReminder();
+});
+$('openSetup').addEventListener('click', () => openSheet('sheetSetup'));
+$('closeSetup').addEventListener('click', closeSheet);
+$('setupVoice').addEventListener('click', () => {
+  closeSheet(); showScreen('profile');
+  trainerAudio.release(); prefs.voiceId = 'piper:ru_RU-dmitri-medium'; store.savePrefs(prefs); renderVoiceOptions();
+  $('voiceSettings').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  $('coachVoiceSelect').focus({ preventScroll: true });
+});
+$('setupModel').addEventListener('click', () => {
+  closeSheet(); showScreen('profile'); $('modelSettings').open = true;
+  $('modelSettings').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  document.querySelector('[data-download-model]').focus({ preventScroll: true });
+});
 function renderModels() {
   for (const [key, info] of Object.entries(modelManager.states)) {
     const button = document.querySelector(`[data-download-model="${key}"]`);
@@ -264,6 +295,7 @@ function renderModels() {
   $('cancelModelDownload').hidden = !modelManager.downloading;
   renderLocalVoiceControls();
   chat.renderHeader();
+  renderSetupReminder();
 }
 /** What the chat shows about the model: running, starting, or absent. */
 const llmState = () => ({ loaded: Boolean(modelManager.loaded), loading: modelManager.busy && !modelManager.downloading, label: LLM_MODELS[prefs.llmModel].label });
@@ -361,7 +393,7 @@ $('previewCoachVoice').addEventListener('click', () => {
   trainerAudio.speak('Привет! Давай потренируемся вместе. Не спеши, держи равновесие. У тебя всё получится.', prefs, PERSONALITIES[prefs.personality]);
 });
 window.speechSynthesis?.addEventListener('voiceschanged', renderVoiceOptions);
-renderVoiceOptions(); renderModels(); trainerAudio.refresh();
+renderVoiceOptions(); renderModels(); trainerAudio.refresh(); modelManager.refresh();
 
 /* ───────────── Live wiring ───────────── */
 async function startSession(options) {

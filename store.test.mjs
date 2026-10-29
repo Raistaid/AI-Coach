@@ -1,6 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initials, sanitizeProfile, greeting, sanitizePrefs, streakDays, historyStats, createThread, freshThread, appendMessage, threadTitle, isFresh, replaceThread, sanitizeChats, AVATAR_HUES } from './app/store.js';
+import { initials, sanitizeProfile, greeting, sanitizePrefs, loadPrefs, savePrefs, KEYS, streakDays, historyStats, createThread, freshThread, appendMessage, threadTitle, isFresh, replaceThread, sanitizeChats, AVATAR_HUES } from './app/store.js';
+
+test('existing installations switch to Dmitri once, then preserve voice and speed edits', () => {
+  const original = globalThis.localStorage;
+  const data = new Map([[KEYS.prefs, JSON.stringify({ voiceDefaultsVersion: 1, voiceId: 'piper:ru_RU-ruslan-medium', voiceRate: 1.2, voiceVolume: .7 })]]);
+  globalThis.localStorage = { getItem: key => data.get(key), setItem: (key, value) => data.set(key, value) };
+  try {
+    const prefs = loadPrefs();
+    assert.equal(prefs.voiceId, 'piper:ru_RU-dmitri-medium');
+    assert.equal(prefs.voiceRate, .7);
+    assert.equal(prefs.voiceVolume, .7);
+    savePrefs({ ...prefs, voiceId: 'piper:ru_RU-denis-medium', voiceRate: 1.1 });
+    assert.equal(loadPrefs().voiceId, 'piper:ru_RU-denis-medium');
+    assert.equal(loadPrefs().voiceRate, 1.1);
+  } finally {
+    if (original === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = original;
+  }
+});
 
 test('object-detector preference migrates the old ball switch and saved voice is sanitized', () => {
   assert.equal(sanitizePrefs({ ball: false }).objects, false);

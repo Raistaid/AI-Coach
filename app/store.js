@@ -82,9 +82,9 @@ export function sanitizePrefs(raw) {
 export function loadPrefs() {
   const prefs = sanitizePrefs(storage.read(KEYS.prefs, {}));
   // Apply the new voice default once to existing installations, then retain edits.
-  if (prefs.voiceDefaultsVersion !== 1) {
+  if (prefs.voiceDefaultsVersion !== 2) {
     prefs.voiceId = DEFAULT_PREFS.voiceId; prefs.voiceRate = DEFAULT_PREFS.voiceRate;
-    prefs.voiceDefaultsVersion = 1; storage.write(KEYS.prefs, prefs);
+    prefs.voiceDefaultsVersion = 2; storage.write(KEYS.prefs, prefs);
   }
   return prefs;
 }
