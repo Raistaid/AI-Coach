@@ -116,16 +116,8 @@ function messageNode(message) {
   if (message.meta) bubble.append(el('small', 'msg-meta', message.meta));
   const foot = el('div', 'msg-foot');
   foot.append(el('time', 'msg-time', timeLabel(message.at)));
-  if (message.liked) { const heart = el('span', 'msg-like'); heart.append(icon('i-heart')); foot.append(heart); }
   bubble.append(foot); wrap.append(bubble);
-  if (!mine) wrap.addEventListener('dblclick', () => toggleLike(message.id, wrap));
   return wrap;
-}
-function toggleLike(id, node) {
-  const thread = { ...ctx.thread, messages: ctx.thread.messages.map(m => (m.id === id ? { ...m, liked: !m.liked } : m)) };
-  ctx.thread = thread; persist();
-  const fresh = messageNode(thread.messages.find(m => m.id === id)); node.replaceWith(fresh);
-  if (thread.messages.find(m => m.id === id).liked) { const burst = el('span', 'like-burst'); burst.append(icon('i-heart')); fresh.append(burst); setTimeout(() => burst.remove(), 900); haptic(8); }
 }
 
 function routeCard(data) {
@@ -193,12 +185,10 @@ function renderChips() {
   }
 }
 
-/** The header names the coach's character and the local model when it is running. */
+/** The header shows only the selected coach personality. */
 export function renderHeader() {
   if (!ctx.prefs) return; // the model manager may report before the chat is initialised
-  const llm = ctx.llmState() || {};
-  const tail = llm.loaded ? `${llm.label || 'модель'} на устройстве` : llm.loading ? 'модель запускается…' : '';
-  text('chatSub', [`${PERSONALITIES[ctx.prefs.personality].name} тренер`, tail].filter(Boolean).join(' · '));
+  text('chatSub', `${PERSONALITIES[ctx.prefs.personality].name} тренер`);
 }
 
 export function renderDrawer() {
@@ -320,8 +310,8 @@ async function llmTalk(query, intent) {
   // The thread itself is the memory: the latest turns, whoever wrote them (rules, planner or model).
   const messages = buildChatMessages(query, context, historyMessages(ctx.thread.messages.slice(0, -1)));
   const thread = ctx.thread;
-  // cloneNode drops the like handler: the temporary bubble is not a stored message.
-  const node = messageNode({ id: 'streaming', role: 'coach', type: 'text', text: '', at: new Date().toISOString() }).cloneNode(true);
+  // The temporary bubble is displayed until the reply has been validated.
+  const node = messageNode({ id: 'streaming', role: 'coach', type: 'text', text: '', at: new Date().toISOString() });
   node.classList.add('streaming');
   const paragraph = node.querySelector('p');
   let shown = false;
